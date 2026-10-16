@@ -2,6 +2,13 @@
 # Telegram handles: public channel usernames (without t.me/) or channels your account has access to.
 telegram_channels: 
   - "@opportunity_alerts"
+  - "@Rez_On_Bridge"
+  - "@Tegegnpathway"
+  - "@amanza_scholarships"
+  - "@blu_aspire_abroad"
+  - "@WorkLinkETH"
+  - "@AbiLink7"
+  - "@jobs_in_ethio"
 
 # RSS feeds from publishers who permit reuse of opportunity announcements.
 rss_feeds: []
@@ -15,7 +22,7 @@ lever_sites: []
 
 # Publishing hours are in Ethiopia local time (Africa/Addis_Ababa).
 publish_hours: [8, 10, 12, 14, 16, 18, 20]
-collect_every_minutes: 120
+collect_every_minutes: 30
 max_items_per_source: 30
 max_message_characters: 6000
 
@@ -24,8 +31,7 @@ required_keywords: []
 #  - scholarship
 #  - internship
 
-# Cloud: six opportunities per platform per run, seven runs per day.
-cloud_batch_size: 6
+# Cloud: collect every 30 minutes; publish one queued item per channel every five minutes.
 cloud_work_seconds: 300
 public_source_workers: 4
 telegram_source_workers: 2
