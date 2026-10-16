@@ -37,6 +37,23 @@ def publication_block_reason(opp):
         r'\b(?:salary|stipend|tuition|accommodation|benefits|funding covers)\b',
         r'\b(?:duration|start date|work location|working hours|contract type)\s*:',
     ))
+    # A provider name is not sufficient for an academic funding announcement.
+    # Require useful application facts when there is no verified closing date.
+    academic = str(opp.get('category') or '').casefold() in ('scholarship', 'fellowship') or bool(
+        re.search(r'(?i)\b(?:scholarships?|fellowships?|financial aid)\b',text))
+    eligibility = str(opp.get('eligibility') or '').strip()
+    has_eligibility = bool(eligibility and eligibility.casefold() not in
+                           ('unknown','not specified','n/a','everyone','all'))
+    eligibility_in_text = bool(re.search(
+        r'(?i)\b(?:eligible|open to|applicants must|students enrolled|graduates in|bachelor.?s degree|master.?s degree|PhD candidates)\b',text))
+    substantive_funding = bool(re.search(
+        r'(?i)(?:\b(?:stipend|tuition waiver|full tuition|monthly allowance|accommodation provided|fully funded)\b|[$€£]\s*\d|\d[\d,.]*\s*(?:EUR|USD|ETB)\b)',text))
+    application_steps = bool(re.search(
+        r'(?i)\b(?:submit|upload|complete|send)\b.{0,65}\b(?:application|documents|transcript|CV|form|proposal)\b',text))
+    academic_details = sum((has_eligibility or eligibility_in_text,
+                            substantive_funding, application_steps))
+    if academic and not deadline and academic_details < 2:
+        return 'Incomplete funding announcement: no deadline and insufficient eligibility, funding or application details.'
     if not named and not deadline and facts < 2:
         return 'Vague announcement: no identifiable institution, no deadline and insufficient concrete details.'
     return ''
