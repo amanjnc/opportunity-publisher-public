@@ -1,8 +1,5 @@
 name: Opportunity publisher
 on:
-  schedule:
-    # Offset five-minute checks to avoid the start-of-hour peak.
-    - cron: '3-59/5 * * * *'
   workflow_dispatch:
     inputs:
       publish:
@@ -16,7 +13,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || vars.PUBLISHER_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
@@ -28,7 +24,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_TARGET_CHANNEL: ${{ secrets.TELEGRAM_TARGET_CHANNEL }}
       TELEGRAM_EDUCATION_CHANNEL: ${{ secrets.TELEGRAM_EDUCATION_CHANNEL }}
-      AUTO_PUBLISH: ${{ vars.PUBLISHER_ENABLED == 'true' && (github.event_name == 'schedule' || inputs.publish) }}
+      AUTO_PUBLISH: ${{ vars.PUBLISHER_ENABLED == 'true' && inputs.publish }}
       AUTO_LINKEDIN: 'false'
       PYTHONUNBUFFERED: '1'
     steps:

@@ -37,3 +37,6 @@ public_source_workers: 4
 telegram_source_workers: 2
 source_timeout_seconds: 50
 cloud_auto_approve: 1
+
+# Weekly per-channel roundup: Monday, Ethiopia time.
+roundup_hour: 8
