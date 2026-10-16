@@ -17,7 +17,7 @@ def collect_all():
     return {'collector_exit': result.returncode}
 
 import publish
-from roundup import publish_roundup
+from roundup import publish_roundup, sync_roundup_destination
 
 LOG = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ def auto_approve():
 
 def run(checkpoint=None):
     init_db()
+    sync_roundup_destination()
     cfg = config()
     budget = min(300, max(30, int(cfg.get('cloud_work_seconds', 300))))
     started = time.monotonic()

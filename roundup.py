@@ -20,6 +20,46 @@ def post_link(channel, message_id):
     return ''
 
 
+def sync_roundup_destination():
+    """Apply the authorized single-channel username rename to saved routing.
+    
+    Multiple historical destinations require explicit routing; never merge them.
+    This does not send or edit any Telegram messages.
+    """
+    channel = env('TELEGRAM_TARGET_CHANNEL')
+    if not post_link(channel, '1'):
+        raise ValueError('Invalid TELEGRAM_TARGET_CHANNEL for roundup links')
+    init_db()
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        destinations = {r[0].casefold() for r in c.execute(
+            "SELECT DISTINCT destination FROM publications WHERE platform='telegram' AND destination<>''")}
+        keys = [dict(r) for r in c.execute('SELECT * FROM weekly_roundups')]
+        if not destinations:
+            destinations.update(row['week_key'].rsplit(':', 1)[0].casefold() for row in keys)
+        previous = destinations - {channel.casefold()}
+        if len(previous) > 1:
+            raise ValueError('Multiple historical Telegram channels found; explicit roundup routing is required')
+        old = next(iter(previous), '')
+        if old:
+            c.execute("UPDATE publications SET destination=? WHERE platform='telegram' AND lower(destination)=?",
+                      (channel, old))
+            for row in keys:
+                prefix, week = row['week_key'].rsplit(':', 1)
+                if prefix.casefold() != old:
+                    continue
+                # Retain old audit records; copy their send guard to the new alias.
+                c.execute("""INSERT OR IGNORE INTO weekly_roundups
+                    (week_key,status,text,remote_id,error,created_at) VALUES(?,?,?,?,?,?)""",
+                    (channel.casefold()+':'+week,row['status'],row['text'],
+                     row['remote_id'],row['error'],row['created_at']))
+            # Keep a private audit breadcrumb, but do not treat it as another channel.
+            c.execute("INSERT INTO state(key,value) VALUES('roundup:previous_destination',?) "
+                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (old,))
+        c.execute("UPDATE publications SET destination=? WHERE platform='telegram' AND destination=''", (channel,))
+    return old
+
+
 def build_roundup(now=None):
     init_db()
     now = (now or datetime.now(TZ)).astimezone(TZ)
@@ -81,6 +121,7 @@ def publish_roundup(now=None):
         return ''
     week = (now.date() - timedelta(days=now.weekday())).isoformat()
     key = channel.casefold() + ':' + week
+    sync_roundup_destination()
     init_db()
     with db() as c:
         if c.execute('SELECT 1 FROM weekly_roundups WHERE week_key=?', (key,)).fetchone():

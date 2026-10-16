@@ -37,7 +37,7 @@ class CloudTests(unittest.TestCase):
             return 2
         with patch('collectors._fetch_public_sources_serial',side_effect=single):self.assertEqual(collectors.fetch_public_sources(cfg),6)
     def test_state_failure_prevents_send(self):
-        with patch('cloud_run.config',return_value={'cloud_work_seconds':300}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.send_telegram') as send:
+        with patch('cloud_run.config',return_value={'cloud_work_seconds':300}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.sync_roundup_destination',return_value=''),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.send_telegram') as send:
             with self.assertRaises(RuntimeError):cloud_run.run(checkpoint=lambda:(_ for _ in ()).throw(RuntimeError('unavailable')))
             send.assert_not_called()
     def test_captions(self):
@@ -53,7 +53,7 @@ class CloudTests(unittest.TestCase):
         self.assertFalse((self.root/'.cloud-restored').exists())
     def test_six_stable_slots(self):
         slots=[]
-        with patch('cloud_run.config',return_value={'cloud_work_seconds':300,'cloud_batch_size':6}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.allowed_platforms',return_value=['telegram']),patch('publish.publish_one',side_effect=lambda platform,slot:slots.append(slot) or 'posted'),patch('cloud_run.publish_roundup',return_value=''):
+        with patch('cloud_run.config',return_value={'cloud_work_seconds':300,'cloud_batch_size':6}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.sync_roundup_destination',return_value=''),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.allowed_platforms',return_value=['telegram']),patch('publish.publish_one',side_effect=lambda platform,slot:slots.append(slot) or 'posted'),patch('cloud_run.publish_roundup',return_value=''):
             cloud_run.run()
         self.assertEqual(len(slots),6);self.assertEqual(len(set(slots)),6)
 
