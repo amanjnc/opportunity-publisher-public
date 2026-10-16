@@ -77,10 +77,9 @@ class RoutingTests(unittest.TestCase):
         self.add_item('Training','Python training for beginners')
         item=storage.claim_next('telegram','queue1',destination='@general_channel')
         self.assertEqual(item['id'],first['id'])
-        self.assertIsNone(storage.claim_next('telegram','queue2',destination='@general_channel'))
-        # Each destination has an independent queue and interval.
+        # Replaying a run stays protected, but the next run need not wait.
+        self.assertIsNone(storage.claim_next('telegram','queue1',destination='@general_channel'))
+        # Each destination has an independent queue.
         self.assertIsNotNone(storage.claim_next('telegram','queue3',destination='@education_channel'))
-        with storage.db() as c:
-            c.execute("UPDATE publications SET created_at='2026-01-01' WHERE destination='@general_channel'")
         item=storage.claim_next('telegram','queue4',destination='@general_channel')
         self.assertEqual(item['category'],'Training')

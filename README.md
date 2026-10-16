@@ -13,7 +13,8 @@ delay or skip scheduled runs; missed intervals are not replayed in a burst.
 Collection runs when at least 30 minutes have elapsed since its last attempt.
 Approved, unexpired opportunities are selected oldest first (creation time,
 then ID), independently for each destination. Each run sends at most one
-opportunity per channel, with at least five minutes between reservation times.
+opportunity per channel, without an additional elapsed-time cooldown. Every workflow run can publish;
+retries of the same GitHub run reuse its reservation to prevent duplicate sends.
 New collections append to the existing encrypted database queue.
 Previous attempts remain protected from automatic retries, including failures
 with uncertain delivery. Monday roundups are separate from the opportunity queue.

@@ -206,14 +206,6 @@ def claim_next(platform: str, slot_key: str, destination: str | None = None) -> 
         occupied = c.execute("SELECT 1 FROM publications WHERE platform=? AND slot_key=?", (platform, slot_key)).fetchone()
         if occupied:
             return None
-        if destination:
-            recent = c.execute(
-                "SELECT 1 FROM publications WHERE platform=? AND destination=? "
-                "AND created_at > ? LIMIT 1",
-                (platform, destination, (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec='seconds'))
-            ).fetchone()
-            if recent:
-                return None
         row = c.execute("""
             SELECT o.* FROM opportunities o
             WHERE o.status='approved'

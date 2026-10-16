@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime
 
 from settings import config, enabled
@@ -102,10 +103,10 @@ def run(checkpoint=None):
             return
         if checkpoint:
             checkpoint()
-        now = datetime.now(publish.TZ)
-        # One FIFO opportunity per destination, with stable five-minute slots.
+        # One FIFO opportunity per destination on every workflow invocation.
         from routing import telegram_routes
-        slot = now.strftime('%Y-%m-%d-%H-') + f'{(now.minute // 5) * 5:02d}'
+        # Retries of the same GitHub run reuse the claim; distinct runs may post immediately.
+        slot = os.environ.get('GITHUB_RUN_ID') or uuid.uuid4().hex
         for platform in publish.allowed_platforms():
             destinations = list(telegram_routes().items()) if platform == 'telegram' else [('linkedin', None)]
             for route, destination in destinations:
