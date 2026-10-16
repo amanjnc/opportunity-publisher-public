@@ -132,7 +132,20 @@ def add_opportunity(data: dict) -> bool:
             return False
         found = find_match(value, c.execute("SELECT * FROM opportunities ORDER BY id").fetchall())
         if found and found[1] == 'exact':
-            c.execute("INSERT OR IGNORE INTO duplicate_sources VALUES(?,?,?)", (value['source_key'], found[0]['id'], found[2]))
+            keeper = dict(found[0])
+            # Fill missing facts only. Never overwrite conflicts, custom captions,
+            # rejected decisions or already attempted/published records.
+            attempted = c.execute('SELECT 1 FROM publications WHERE opportunity_id=?', (keeper['id'],)).fetchone()
+            if not attempted and keeper['status'] != 'rejected':
+                enrich = {key: value.get(key) for key in
+                          ('organization', 'location', 'deadline', 'deadline_note',
+                           'eligibility', 'description', 'apply_url', 'image_path')
+                          if not keeper.get(key) and value.get(key)}
+                if enrich:
+                    assigns = ','.join(key + '=?' for key in enrich)
+                    c.execute('UPDATE opportunities SET ' + assigns + ',updated_at=? WHERE id=?',
+                              [*enrich.values(), now, keeper['id']])
+            c.execute("INSERT OR IGNORE INTO duplicate_sources VALUES(?,?,?)", (value['source_key'], keeper['id'], found[2]))
             return False
         cursor = c.execute(
             f"INSERT OR IGNORE INTO opportunities ({','.join(columns)},status,created_at,updated_at) "

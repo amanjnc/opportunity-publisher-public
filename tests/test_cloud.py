@@ -88,3 +88,20 @@ class PublicStateTests(unittest.TestCase):
     def test_accepts_private_state(self):
         with patch.dict(os.environ,{'STATE_REPOSITORY':'owner/state'}),patch('cloud_state.api',return_value={'private':True}):
             self.assertEqual(cloud_state.repo(),'owner/state')
+
+class DuplicateEnrichmentTests(unittest.TestCase):
+    setUp = CloudTests.setUp
+    tearDown = CloudTests.tearDown
+    add = CloudTests.add
+    def test_duplicate_fills_missing_image_and_keeps_one_record(self):
+        self.add('Marketing Intern Opportunity','https://example.org/unique')
+        value=dict(source_key='other-channel',title='Marketing Intern Opportunity',apply_url='https://example.org/unique',image_path='flyer.jpg')
+        self.assertFalse(storage.add_opportunity(value))
+        rows=storage.get_opportunities();self.assertEqual(len(rows),1);self.assertEqual(rows[0]['image_path'],'flyer.jpg')
+        self.assertTrue(storage.source_exists('other-channel'))
+    def test_published_duplicate_never_changes_published_record(self):
+        self.add('Marketing Intern Opportunity','https://example.org/unique')
+        oid=storage.get_opportunities()[0]['id'];storage.update_opportunity(oid,{},status='approved')
+        storage.claim_next('telegram','test');storage.set_publication(oid,'telegram','posted','123')
+        self.assertFalse(storage.add_opportunity(dict(source_key='other-channel',title='Marketing Intern Opportunity',apply_url='https://example.org/unique',image_path='other.jpg')))
+        self.assertEqual(storage.get_opportunity(oid)['image_path'],'')
