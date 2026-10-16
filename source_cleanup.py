@@ -27,7 +27,7 @@ def social_url(url):
     if host == 'linkedin.com':
         # Actual LinkedIn vacancies stay; personal/company profiles are promotion.
         return not parsed.path.startswith('/jobs/')
-    return host in SOCIAL_HOSTS
+    return any(host == root or host.endswith('.'+root) for root in SOCIAL_HOSTS)
 
 
 def promotional(line):

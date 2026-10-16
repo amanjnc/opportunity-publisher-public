@@ -2,11 +2,19 @@
 import re
 from source_cleanup import clean_source
 from message_layout import visible_text
+from urllib.parse import urlsplit
 
 
 def publication_block_reason(opp):
     raw='\n'.join(str(opp.get(k) or '') for k in
                   ('title','description','raw_text','eligibility','location'))
+    host=(urlsplit(str(opp.get('apply_url') or '')).hostname or '').lower()
+    if any(host == root or host.endswith('.'+root) for root in
+           ('tiktok.com','youtube.com','youtu.be','instagram.com','facebook.com','fb.com','twitter.com','x.com')):
+        return 'Social-media content link is not an opportunity application page.'
+    title=visible_text(str(opp.get('title') or ''))
+    if re.search(r"(?i)\b(?:am|i['’]?m|we['’]?re|we are|going|now)\s+live\b|\blive (?:on|in) (?:tiktok|instagram|facebook|youtube)\b",title):
+        return 'Livestream or personal status announcement; not an opportunity.'
     text=visible_text(clean_source(raw))
     text=re.sub(r'https?://\S+','',text)
     tool=bool(re.search(r'(?i)\b(?:free tool|web app|university finder|grad school finder|search tool|search platform|subscription|software trial)\b',text))

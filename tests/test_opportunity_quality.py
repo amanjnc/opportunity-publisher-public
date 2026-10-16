@@ -47,3 +47,19 @@ class QualityQueueTests(unittest.TestCase):
         with patch('cloud_run.config',return_value={'cloud_auto_approve':1}):
             self.assertEqual(cloud_run.auto_approve(),0)
         self.assertEqual(storage.get_opportunities()[0]['status'],'review')
+
+class SocialAnnouncementTests(unittest.TestCase):
+    def test_exact_livestream_example_blocked_even_with_bad_category(self):
+        item={'title':'Am live in TikTok','category':'Scholarship','organization':'TikTok',
+              'deadline':'2027-01-01','apply_url':'https://vt.tiktok.com/ZS9D3Vy8NprRx-f4Nf1'}
+        self.assertTrue(publication_block_reason(item))
+    def test_live_title_blocked_even_with_non_social_link(self):
+        self.assertTrue(publication_block_reason({'title':"I'm live on Instagram",'organization':'Example','apply_url':'https://example.org'}))
+    def test_social_only_links_blocked_regardless_of_title(self):
+        for host in ('vm.tiktok.com','m.facebook.com','www.instagram.com','youtu.be','youtube.com'):
+            self.assertTrue(publication_block_reason({'title':'Opportunity alert','organization':'Example','apply_url':'https://'+host+'/abc'}))
+    def test_valid_vacancy_link_not_blocked_for_mentioning_platform(self):
+        self.assertFalse(publication_block_reason({'title':'TikTok software engineer','organization':'TikTok','description':'Requirements: computer science. Responsibilities: develop software.','apply_url':'https://careers.example.org/jobs/123'}))
+    def test_shortened_social_link_removed_by_footer_cleaner(self):
+        from source_cleanup import clean_source
+        self.assertEqual(clean_source('Details\nhttps://vt.tiktok.com/abc'),'Details')
