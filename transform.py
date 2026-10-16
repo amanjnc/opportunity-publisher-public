@@ -226,6 +226,8 @@ def _summary(raw: str, title: str, limit: int | None = None) -> str:
 
 
 def basic_extract(raw: str, source_name: str, default_url: str = '', title_hint: str = '') -> dict:
+    from source_cleanup import clean_source
+    raw = clean_source(raw)
     title = _smart_title(raw, title_hint)
     return {
         'title': title,
@@ -242,6 +244,8 @@ def basic_extract(raw: str, source_name: str, default_url: str = '', title_hint:
 
 
 def llm_extract(raw: str, base: dict) -> dict:
+    from source_cleanup import clean_source
+    raw = clean_source(raw)
     key = env('OPENAI_API_KEY')
     if not key:
         return base

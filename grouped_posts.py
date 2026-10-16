@@ -4,12 +4,14 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from message_layout import visible_text, text_units
+from source_cleanup import clean_source
 
 PROMOTION = re.compile(r'(?i)^\s*[^\w<]*(?:follow|subscribe|join)\b.*(?:channel|updates|opportunities|abilink)|^\s*@\w+\s*$')
 KINDS = re.compile(r'(?i)\b(?:internships?|volunteers?|fellowships?|fellows|scholarships?|programmes?|programs?|vacanc(?:y|ies)|jobs?|grants?|training|workshops?)\b')
 
 
 def is_grouped(raw):
+    raw = clean_source(raw)
     urls = {u.rstrip(').,') for u in re.findall(r'https?://[^\s<>"\]]+', raw)}
     urls = {u for u in urls if urlsplit(u).hostname not in ('t.me', 'telegram.me')}
     headings = [line for line in raw.splitlines()
@@ -18,6 +20,7 @@ def is_grouped(raw):
 
 
 def group_category(raw):
+    raw = clean_source(raw)
     headings = '\n'.join(line for line in raw.splitlines() if 'http' not in line and not PROMOTION.search(line.strip('*_')))
     if re.search(r'(?i)\b(?:internships?|volunteers?|jobs?|vacanc(?:y|ies)|grants?|training|workshops?|competitions?|mentorships?)\b', headings):
         return 'Other'
@@ -48,7 +51,7 @@ class SafeHTML(HTMLParser):
 
 
 def render_group(raw, source_html=''):
-    source = source_html or escape(raw, quote=False)
+    source = clean_source(source_html or escape(raw, quote=False))
     lines = []
     for line in source.splitlines():
         plain = visible_text(line).strip().strip('*_')
