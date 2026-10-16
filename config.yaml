@@ -1,0 +1,33 @@
+# Edit this file to choose YOUR trusted sources.
+# Telegram handles: public channel usernames (without t.me/) or channels your account has access to.
+telegram_channels: 
+  - "@opportunity_alerts"
+
+# RSS feeds from publishers who permit reuse of opportunity announcements.
+rss_feeds: []
+  # - "https://example.org/opportunities/rss"
+
+# Public employer job-board APIs. Board/site tokens come from the employer's own jobs page.
+greenhouse_boards: []
+  # - "company-board-token"
+lever_sites: []
+  # - "company-site-token"
+
+# Publishing hours are in Ethiopia local time (Africa/Addis_Ababa).
+publish_hours: [8, 10, 12, 14, 16, 18, 20]
+collect_every_minutes: 120
+max_items_per_source: 30
+max_message_characters: 6000
+
+# Accepted topics. Leave empty to accept all; manual approval is always required.
+required_keywords: []
+#  - scholarship
+#  - internship
+
+# Cloud: six opportunities per platform per run, seven runs per day.
+cloud_batch_size: 6
+cloud_work_seconds: 300
+public_source_workers: 4
+telegram_source_workers: 2
+source_timeout_seconds: 50
+cloud_auto_approve: 1

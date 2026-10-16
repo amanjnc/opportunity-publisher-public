@@ -1,0 +1,63 @@
+name: Opportunity publisher
+on:
+  schedule:
+    - cron: '17 5,7,9,11,13,15,17 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish live posts (requires PUBLISHER_ENABLED=true)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: opportunity-publisher-state
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || vars.PUBLISHER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      STATE_REPOSITORY: amanjnc/opportunity-publisher
+      STATE_REPO_TOKEN: ${{ secrets.STATE_REPO_TOKEN }}
+      STATE_ENCRYPTION_KEY: ${{ secrets.STATE_ENCRYPTION_KEY }}
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_TARGET_CHANNEL: ${{ secrets.TELEGRAM_TARGET_CHANNEL }}
+      AUTO_PUBLISH: ${{ vars.PUBLISHER_ENABLED == 'true' && (github.event_name == 'schedule' || inputs.publish) }}
+      AUTO_LINKEDIN: 'false'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-cloud.txt
+      - run: python -m pip install -r requirements-cloud.txt
+      - name: Restore encrypted PRIVATE state
+        run: python cloud_state.py restore
+      - name: Validate state without modifying or publishing
+        if: env.AUTO_PUBLISH != 'true'
+        run: |
+          python - <<'PYTHON'
+          import sqlite3
+          from pathlib import Path
+          for filename in ('opportunities.db', 'collector.session'):
+              path = Path('data') / filename
+              if not path.is_file():
+                  raise SystemExit('Required state file missing: ' + filename)
+              with sqlite3.connect('file:' + path.as_posix() + '?mode=ro', uri=True) as connection:
+                  if connection.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+                      raise SystemExit('State integrity check failed')
+          print('Private state decrypted and verified. No collection, posting or state changes.')
+          PYTHON
+      - name: Collect and publish a bounded batch
+        if: env.AUTO_PUBLISH == 'true'
+        run: python cloud_run.py
+      - name: Save progress even after a failed live cycle
+        if: ${{ always() && env.AUTO_PUBLISH == 'true' }}
+        run: |
+          if [ -f .cloud-restored ]; then python cloud_state.py save; fi
