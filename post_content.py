@@ -217,6 +217,10 @@ def render_post(opp,platform,today=None):
     from transform import _tag, deadline_display, labeled_value
     if platform not in ('telegram','linkedin'):
         raise ValueError('Unsupported platform')
+    if platform == 'telegram':
+        from grouped_posts import is_grouped, render_group
+        if is_grouped(str(opp.get('raw_text') or '')):
+            return str(opp.get('telegram_text') or '') or render_group(opp['raw_text'])
     url=application_url(opp)
     category=str(opp.get('category') or 'Other')
     title=str(opp.get('title') or 'Opportunity — title needs review').strip()

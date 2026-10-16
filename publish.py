@@ -28,7 +28,19 @@ def send_telegram(text: str, photo: tuple[bytes,str,str] | None = None, on_part=
     if not token or not channel:
         raise RuntimeError('Telegram bot token and destination channel must be configured in .env')
     if photo is None:
-        raise RuntimeError('Image required for Telegram post')
+        from grouped_posts import split_messages
+        first_id = ''
+        for index, part in enumerate(split_messages(text)):
+            if index:
+                time.sleep(1.05)
+            remote = send_telegram_text(part, channel=channel)
+            if not first_id:
+                first_id = remote
+            if on_part:
+                on_part(remote, 'text')
+        if not first_id:
+            raise RuntimeError('Telegram post is empty')
+        return first_id
     binary, mimetype, filename = photo
     if len(binary) > 9_000_000:
         raise RuntimeError('Image is too large to upload')
@@ -158,10 +170,15 @@ def publish_one(platform: str, slot_key: str, destination: str | None = None) ->
             raise RuntimeError('Application link is missing or invalid; review before publishing')
         photo = attachment_image(opportunity)
         text = format_post(opportunity, platform)
+        from grouped_posts import is_grouped
+        if platform == 'telegram' and is_grouped(opportunity.get('raw_text', '')) and visible_units(text) > 1024:
+            photo = None
         if platform == 'telegram':
             from storage import record_publication_part
             remote_id = send_telegram(text, photo, channel=opportunity['publication_destination'], on_part=lambda remote, kind: record_publication_part(opportunity['id'], platform, remote, kind))
         else:
+            if photo is None:
+                raise RuntimeError('LinkedIn image posting requires a source image')
             remote_id = send_linkedin(text, photo)
         set_publication(opportunity['id'], platform, 'posted', remote_id=remote_id)
         return f"{platform}: posted #{opportunity['id']} {opportunity['title']}"

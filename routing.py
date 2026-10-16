@@ -22,6 +22,9 @@ def telegram_routes():
 
 
 def telegram_destination(opportunity):
-    route = 'education' if str(opportunity.get('category') or '').strip().casefold() in EDUCATION_CATEGORIES else 'general'
+    from grouped_posts import is_grouped, group_category
+    raw = str(opportunity.get('raw_text') or '')
+    category = group_category(raw) if is_grouped(raw) else str(opportunity.get('category') or '')
+    route = 'education' if category.strip().casefold() in EDUCATION_CATEGORIES else 'general'
     # Missing education secret holds those items; never fall back to the wrong channel.
     return telegram_routes().get(route, '')

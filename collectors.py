@@ -24,10 +24,14 @@ def keyword_match(text: str, cfg: dict) -> bool:
 
 
 def store(raw: str, source_key: str, source_name: str, source_url: str, cfg: dict,
-          title_hint: str = '', fields: dict | None = None) -> bool:
+          title_hint: str = '', fields: dict | None = None, source_html: str = '') -> bool:
     if not raw.strip() or not keyword_match(raw, cfg) or source_exists(source_key):
         return False
     data = extract(raw, source_name, source_url, title_hint)
+    from grouped_posts import is_grouped, render_group, group_category
+    if is_grouped(raw):
+        data['category'] = group_category(raw)
+        data['telegram_text'] = render_group(raw, source_html)
     if fields:
         data.update({k: v for k, v in fields.items() if v})
     data.update({'source_key': source_key, 'source_url': source_url,
@@ -181,7 +185,8 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                     if not source_exists(source_key) and keyword_match(raw, cfg):
                         media_name = await source_image(client, entity, msg, messages)
                     channel_total += int(store(raw, source_key, channel, url, cfg,
-                                       fields={'image_path': media_name} if media_name else None))
+                                       fields={'image_path': media_name} if media_name else None,
+                                       source_html=getattr(msg, 'text_html', '') or ''))
                 if highest > old_id:
                     set_state(cursor_key, str(highest))
             except Exception as exc:

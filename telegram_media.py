@@ -15,8 +15,8 @@ def image_media(msg):
     doc = getattr(msg, 'document', None)
     if (getattr(doc, 'mime_type', '') or '').lower() in ('image/jpeg','image/png','image/webp'):
         return msg
-    webpage = getattr(getattr(msg, 'media', None), 'webpage', None)
-    return getattr(webpage, 'photo', None)
+    # Link previews are not source-attached images.
+    return None
 
 
 async def source_image(client, entity, msg, siblings=()):
