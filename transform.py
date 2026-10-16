@@ -372,4 +372,5 @@ def _clean_field(value: object, limit: int = 180) -> str:
 
 def format_post(opp: dict, platform: str, today: date | None = None) -> str:
     from post_content import render_post
-    return render_post(opp, platform, today)
+    from opportunity_tags import tag_post
+    return tag_post(render_post(opp, platform, today), opp)

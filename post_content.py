@@ -261,6 +261,4 @@ def render_post(opp,platform,today=None):
         lines+=['',f'🔗 <a href="{esc(url)}">Apply here</a>' if platform=='telegram' else f'🔗 Apply here: {url}']
     else:
         lines+=['','⚠️ Application link needs review before publishing.']
-    if platform=='linkedin':
-        lines+=['','#Opportunities #'+re.sub(r'[^A-Za-z]','',category)]
     return '\n'.join(lines)

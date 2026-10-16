@@ -116,6 +116,10 @@ def telegram_layout(text):
         return text, []
 
     source = [line.strip() for line in text.splitlines() if line.strip()]
+    # Our generated discovery footer is reserved, not ranked away by shortening.
+    footer = ''
+    if source and re.fullmatch(r'#[A-Za-z][A-Za-z0-9]*(?: #[A-Za-z][A-Za-z0-9]*)*', source[-1]):
+        footer = source.pop()
 
     # Keep the opportunity header and title together.
     opening = source[:2]
@@ -171,6 +175,8 @@ def telegram_layout(text):
             lines.append(item["line"])
             previous_heading = current_heading
 
+        if footer:
+            lines.extend(['', footer])
         return "\n".join(lines).strip()
 
     # Reserve room for the application link before selecting other details.
