@@ -55,6 +55,11 @@ jobs:
                       raise SystemExit('State integrity check failed')
           print('Private state decrypted and verified. No collection, posting or state changes.')
           PYTHON
+      - name: Repair collector login when supplied
+        if: env.AUTO_PUBLISH == 'true'
+        env:
+          TELEGRAM_COLLECTOR_LOGIN: ${{ secrets.TELEGRAM_COLLECTOR_LOGIN }}
+        run: python repair_cloud_login.py
       - name: Collect when due and publish one queued post per channel
         if: env.AUTO_PUBLISH == 'true'
         run: python cloud_run.py
