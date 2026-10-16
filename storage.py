@@ -217,7 +217,9 @@ def claim_next(platform: str, slot_key: str, destination: str | None = None) -> 
         previous = c.execute("SELECT o.* FROM publications p JOIN opportunities o ON o.id=p.opportunity_id WHERE p.platform=?", (platform,)).fetchall()
         from post_content import application_url
         from routing import telegram_destination
+        from opportunity_quality import publication_block_reason
         row = next((r for r in row if application_url(dict(r))
+                    and not publication_block_reason(dict(r))
                     and (platform != 'telegram' or telegram_destination(dict(r)))
                     and (not destination or telegram_destination(dict(r)) == destination)
                     and not find_match(dict(r), previous)), None)

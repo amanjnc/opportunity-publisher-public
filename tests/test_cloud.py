@@ -16,7 +16,7 @@ class CloudTests(unittest.TestCase):
         for p in reversed(self.patches):p.stop()
         self.temp.cleanup();self.environment.stop()
     def add(self,title,url,deadline=''):
-        storage.add_opportunity(dict(source_key=title,title=title,apply_url=url,description='Useful factual benefits',raw_text='Useful facts',deadline=deadline))
+        storage.add_opportunity(dict(source_key=title,title=title,organization='Example Institute',apply_url=url,description='Useful factual benefits',raw_text='Useful facts',deadline=deadline))
     def test_encrypted_state(self):
         self.add('A distinct test opportunity','https://example.org/a')
         key=Fernet.generate_key()

@@ -29,7 +29,10 @@ def auto_approve():
         return 0
     count = 0
     today = datetime.now(publish.TZ).date().isoformat()
+    from opportunity_quality import publication_block_reason
     for item in get_opportunities('review', limit=2000):
+        if publication_block_reason(item):
+            continue
         deadline = item.get('deadline') or ''
         if deadline:
             try:
