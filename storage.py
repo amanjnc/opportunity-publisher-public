@@ -216,16 +216,22 @@ def claim_next(platform: str, slot_key: str) -> dict | None:
         """, (today, platform)).fetchall()
         previous = c.execute("SELECT o.* FROM publications p JOIN opportunities o ON o.id=p.opportunity_id WHERE p.platform=?", (platform,)).fetchall()
         from post_content import application_url
-        row = next((r for r in row if application_url(dict(r)) and not find_match(dict(r), previous)), None)
+        from routing import telegram_destination
+        row = next((r for r in row if application_url(dict(r))
+                    and (platform != 'telegram' or telegram_destination(dict(r)))
+                    and not find_match(dict(r), previous)), None)
         if not row:
             return None
         now = utcnow()
         c.execute("INSERT INTO publications(opportunity_id,platform,slot_key,created_at,updated_at) "
                   "VALUES(?,?,?,?,?)", (row["id"], platform, slot_key, now, now))
         if platform == 'telegram':
-            from settings import env
-            c.execute("UPDATE publications SET destination=? WHERE opportunity_id=? AND platform=?", (env('TELEGRAM_TARGET_CHANNEL'), row['id'], platform))
-        return dict(row)
+            destination = telegram_destination(dict(row))
+            c.execute("UPDATE publications SET destination=? WHERE opportunity_id=? AND platform=?", (destination, row['id'], platform))
+        result = dict(row)
+        if platform == 'telegram':
+            result['publication_destination'] = destination
+        return result
 
 
 def set_publication(opportunity_id: int, platform: str, status: str, remote_id: str = "", error: str = ""):

@@ -22,9 +22,9 @@ LOG = logging.getLogger(__name__)
 TZ = timezone(timedelta(hours=3), 'Africa/Addis_Ababa')
 
 
-def send_telegram(text: str, photo: tuple[bytes,str,str] | None = None, on_part=None) -> str:
+def send_telegram(text: str, photo: tuple[bytes,str,str] | None = None, on_part=None, *, channel: str | None = None) -> str:
     """Use sendPhoto so every publication has both a picture and a bold caption."""
-    token, channel = env('TELEGRAM_BOT_TOKEN'), env('TELEGRAM_TARGET_CHANNEL')
+    token, channel = env('TELEGRAM_BOT_TOKEN'), channel or env('TELEGRAM_TARGET_CHANNEL')
     if not token or not channel:
         raise RuntimeError('Telegram bot token and destination channel must be configured in .env')
     if photo is None:
@@ -71,7 +71,7 @@ def send_telegram(text: str, photo: tuple[bytes,str,str] | None = None, on_part=
     first_detail_id = ''
     for continuation in continuations:
         time.sleep(1.05)
-        detail_id = send_telegram_text(continuation)
+        detail_id = send_telegram_text(continuation, channel=channel)
         if not first_detail_id:
             first_detail_id = detail_id
         if on_part:
@@ -81,9 +81,9 @@ def send_telegram(text: str, photo: tuple[bytes,str,str] | None = None, on_part=
 
 
 
-def send_telegram_text(text: str) -> str:
+def send_telegram_text(text: str, *, channel: str | None = None) -> str:
     """Detailed posts and roundups: HTML text with link previews disabled."""
-    token, channel = env('TELEGRAM_BOT_TOKEN'), env('TELEGRAM_TARGET_CHANNEL')
+    token, channel = env('TELEGRAM_BOT_TOKEN'), channel or env('TELEGRAM_TARGET_CHANNEL')
     if not token or not channel:
         raise RuntimeError('Telegram destination and bot token are required')
     if not 0 < visible_units(text) <= 4096:
@@ -160,7 +160,7 @@ def publish_one(platform: str, slot_key: str) -> str:
         text = format_post(opportunity, platform)
         if platform == 'telegram':
             from storage import record_publication_part
-            remote_id = send_telegram(text, photo, on_part=lambda remote, kind: record_publication_part(opportunity['id'], platform, remote, kind))
+            remote_id = send_telegram(text, photo, channel=opportunity['publication_destination'], on_part=lambda remote, kind: record_publication_part(opportunity['id'], platform, remote, kind))
         else:
             remote_id = send_linkedin(text, photo)
         set_publication(opportunity['id'], platform, 'posted', remote_id=remote_id)

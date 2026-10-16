@@ -12,6 +12,8 @@ from transform import basic_extract, format_post, preferred_url
 
 class CoreTests(unittest.TestCase):
     def setUp(self):
+        self.environment = patch.dict('os.environ', {'TELEGRAM_TARGET_CHANNEL':'@general_channel', 'TELEGRAM_EDUCATION_CHANNEL':'@education_channel'})
+        self.environment.start()
         self.temp = tempfile.TemporaryDirectory()
         self.old_path = storage.DB_PATH
         self.old_dir = storage.DATA_DIR
@@ -23,6 +25,7 @@ class CoreTests(unittest.TestCase):
         storage.DB_PATH = self.old_path
         storage.DATA_DIR = self.old_dir
         self.temp.cleanup()
+        self.environment.stop()
 
     def opportunity(self, name="Test opportunity", url="https://example.org/jobs/123", deadline=""):
         return dict(source_key="manual:" + name + url, title=name, organization="Example Org",

@@ -110,10 +110,10 @@ def run(checkpoint=None):
             # Persist roundup claim before its network send as well.
             import roundup
             original_send = publish.send_telegram_text
-            def send_roundup(text):
+            def send_roundup(text, **kwargs):
                 if checkpoint:
                     checkpoint()
-                return original_send(text)
+                return original_send(text, **kwargs)
             publish.send_telegram_text = send_roundup
             try:
                 print(publish_roundup(), flush=True)

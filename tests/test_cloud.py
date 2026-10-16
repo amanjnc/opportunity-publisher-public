@@ -7,13 +7,14 @@ from message_layout import telegram_layout, visible_units
 
 class CloudTests(unittest.TestCase):
     def setUp(self):
+        self.environment=patch.dict('os.environ',{'TELEGRAM_TARGET_CHANNEL':'@general_channel','TELEGRAM_EDUCATION_CHANNEL':'@education_channel'});self.environment.start()
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name)
         self.patches=[patch.object(storage,'DB_PATH',self.root/'data/opportunities.db'),patch.object(storage,'DATA_DIR',self.root/'data'),patch.object(cloud_state,'ROOT',self.root)]
         for p in self.patches:p.start()
         storage.init_db()
     def tearDown(self):
         for p in reversed(self.patches):p.stop()
-        self.temp.cleanup()
+        self.temp.cleanup();self.environment.stop()
     def add(self,title,url,deadline=''):
         storage.add_opportunity(dict(source_key=title,title=title,apply_url=url,description='Useful factual benefits',raw_text='Useful facts',deadline=deadline))
     def test_encrypted_state(self):
