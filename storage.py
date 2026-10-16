@@ -195,7 +195,7 @@ def update_opportunity(opp_id: int, changes: dict, status: str | None = None):
         c.execute(f"UPDATE opportunities SET {assigns} WHERE id=?", [*filtered.values(), opp_id])
 
 
-def claim_next(platform: str, slot_key: str) -> dict | None:
+def claim_next(platform: str, slot_key: str, destination: str | None = None) -> dict | None:
     """Reserves ONE approved posting for the slot, atomically across processes."""
     if platform not in ("telegram", "linkedin"):
         raise ValueError("Unsupported platform")
@@ -206,6 +206,14 @@ def claim_next(platform: str, slot_key: str) -> dict | None:
         occupied = c.execute("SELECT 1 FROM publications WHERE platform=? AND slot_key=?", (platform, slot_key)).fetchone()
         if occupied:
             return None
+        if destination:
+            recent = c.execute(
+                "SELECT 1 FROM publications WHERE platform=? AND destination=? "
+                "AND created_at > ? LIMIT 1",
+                (platform, destination, (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec='seconds'))
+            ).fetchone()
+            if recent:
+                return None
         row = c.execute("""
             SELECT o.* FROM opportunities o
             WHERE o.status='approved'
@@ -219,6 +227,7 @@ def claim_next(platform: str, slot_key: str) -> dict | None:
         from routing import telegram_destination
         row = next((r for r in row if application_url(dict(r))
                     and (platform != 'telegram' or telegram_destination(dict(r)))
+                    and (not destination or telegram_destination(dict(r)) == destination)
                     and not find_match(dict(r), previous)), None)
         if not row:
             return None

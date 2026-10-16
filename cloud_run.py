@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 
 from settings import config, enabled
-from storage import db, init_db, update_opportunity, get_opportunities
+from storage import db, init_db, update_opportunity, get_opportunities, get_state, set_state
 from post_content import application_url
 def collect_all():
     """Separate process provides a hard deadline, including stalled source threads."""
@@ -64,8 +64,8 @@ def run(checkpoint=None):
     original_set = publish.set_publication
     import storage
     original_part = storage.record_publication_part
-    def claimed(platform, slot):
-        item = original_claim(platform, slot)
+    def claimed(platform, slot, **kwargs):
+        item = original_claim(platform, slot, **kwargs)
         if item and checkpoint:
             checkpoint()  # Durable reservation BEFORE sending. Failure prevents send.
         return item
@@ -83,10 +83,18 @@ def run(checkpoint=None):
     try:
         # Reserve up to 120 seconds for publishing and state saves.
         signal.alarm(budget)
-        try:
-            print('Collection:', collect_all(), flush=True)
-        except (TimeoutError, subprocess.TimeoutExpired):
-            print('Collection budget reached; collected records retained.', flush=True)
+        last_collection = float(get_state('cloud:last_collection_attempt', '0'))
+        if time.time() - last_collection >= 30 * 60:
+            # Persist attempt time before collecting, even if a source times out.
+            set_state('cloud:last_collection_attempt', str(time.time()))
+            if checkpoint:
+                checkpoint()
+            try:
+                print('Collection:', collect_all(), flush=True)
+            except (TimeoutError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+                print('Collection stopped; collected records retained:', type(exc).__name__, flush=True)
+        else:
+            print('Collection not due; using the saved queue.', flush=True)
         signal.alarm(max(1, int(budget - (time.monotonic() - started))))
         print('Automatically approved:', auto_approve(), flush=True)
         if not enabled('AUTO_PUBLISH'):
@@ -95,17 +103,16 @@ def run(checkpoint=None):
         if checkpoint:
             checkpoint()
         now = datetime.now(publish.TZ)
-        # Stable two-hour slot. Delayed runs after minute 29 are accepted.
-        slot = now.strftime('%Y-%m-%d-') + f'{(now.hour // 2) * 2:02d}'
-        batch = max(1, min(20, int(cfg.get('cloud_batch_size', 6))))
+        # One FIFO opportunity per destination, with stable five-minute slots.
+        from routing import telegram_routes
+        slot = now.strftime('%Y-%m-%d-%H-') + f'{(now.minute // 5) * 5:02d}'
         for platform in publish.allowed_platforms():
-            for index in range(batch):
+            destinations = list(telegram_routes().items()) if platform == 'telegram' else [('linkedin', None)]
+            for route, destination in destinations:
                 if time.monotonic() - started > budget - 55:
                     return
-                message = publish.publish_one(platform, f'cloud:{slot}:{index}')
+                message = publish.publish_one(platform, f'queue:{slot}:{route}', destination=destination)
                 print(message, flush=True)
-                if 'no new approved' in message or 'FAILED' in message:
-                    break
         if time.monotonic() - started < budget - 45:
             # Persist roundup claim before its network send as well.
             import roundup

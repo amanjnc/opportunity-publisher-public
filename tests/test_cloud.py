@@ -52,11 +52,19 @@ class CloudTests(unittest.TestCase):
         with patch('cloud_state.repo',return_value='owner/repo'),patch('cloud_state.api',side_effect=RuntimeError('network')):
             with self.assertRaises(RuntimeError):cloud_state.restore()
         self.assertFalse((self.root/'.cloud-restored').exists())
-    def test_six_stable_slots(self):
+    def test_one_stable_slot_per_channel(self):
         slots=[]
-        with patch('cloud_run.config',return_value={'cloud_work_seconds':300,'cloud_batch_size':6}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.sync_roundup_destination',return_value=''),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.allowed_platforms',return_value=['telegram']),patch('publish.publish_one',side_effect=lambda platform,slot:slots.append(slot) or 'posted'),patch('cloud_run.publish_roundup',return_value=''):
+        with patch('cloud_run.config',return_value={'cloud_work_seconds':300,'cloud_batch_size':6}),patch('cloud_run.collect_all',return_value={}),patch('cloud_run.sync_roundup_destination',return_value=''),patch('cloud_run.auto_approve',return_value=0),patch('cloud_run.enabled',return_value=True),patch('publish.allowed_platforms',return_value=['telegram']),patch('publish.publish_one',side_effect=lambda platform,slot,**kwargs:slots.append(slot) or 'posted'),patch('cloud_run.publish_roundup',return_value=''):
             cloud_run.run()
-        self.assertEqual(len(slots),6);self.assertEqual(len(set(slots)),6)
+        self.assertEqual(len(slots),2);self.assertEqual(len(set(slots)),2)
+
+    def test_collection_waits_thirty_minutes(self):
+        import time
+        storage.set_state('cloud:last_collection_attempt',str(time.time()))
+        with patch('cloud_run.collect_all') as collect,patch('cloud_run.sync_roundup_destination'),patch('cloud_run.auto_approve'),patch('cloud_run.enabled',return_value=False):
+            cloud_run.run()
+        collect.assert_not_called()
+
 
 class TelegramCursorTests(unittest.IsolatedAsyncioTestCase):
     async def test_incremental_reads_oldest_unseen_and_advances_cursor(self):

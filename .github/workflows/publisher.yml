@@ -1,7 +1,7 @@
 name: Opportunity publisher
 on:
   schedule:
-    - cron: '17 5,7,9,11,13,15,17 * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       publish:
@@ -55,7 +55,7 @@ jobs:
                       raise SystemExit('State integrity check failed')
           print('Private state decrypted and verified. No collection, posting or state changes.')
           PYTHON
-      - name: Collect and publish a bounded batch
+      - name: Collect when due and publish one queued post per channel
         if: env.AUTO_PUBLISH == 'true'
         run: python cloud_run.py
       - name: Save progress even after a failed live cycle

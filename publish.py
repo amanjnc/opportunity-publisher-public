@@ -149,8 +149,8 @@ def send_linkedin(text: str, photo: tuple[bytes,str,str] | None = None) -> str:
     return headers.get('x-restli-id', headers.get('X-RestLi-Id', ''))
 
 
-def publish_one(platform: str, slot_key: str) -> str:
-    opportunity = claim_next(platform, slot_key)
+def publish_one(platform: str, slot_key: str, destination: str | None = None) -> str:
+    opportunity = claim_next(platform, slot_key, destination=destination) if destination else claim_next(platform, slot_key)
     if not opportunity:
         return f'{platform}: no new approved opportunity or slot already used'
     try:

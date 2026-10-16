@@ -70,3 +70,17 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(send.call_count,2)
             self.assertEqual({x.kwargs['channel'] for x in send.call_args_list},{'@general_channel','@education_channel'})
             roundup.publish_roundup(now);self.assertEqual(send.call_count,2)
+
+    def test_destination_filter_and_fifo(self):
+        self.add_item('Scholarship','A scholarship for students')
+        first=self.add_item('Job','A distinct engineering role')
+        self.add_item('Training','Python training for beginners')
+        item=storage.claim_next('telegram','queue1',destination='@general_channel')
+        self.assertEqual(item['id'],first['id'])
+        self.assertIsNone(storage.claim_next('telegram','queue2',destination='@general_channel'))
+        # Each destination has an independent queue and interval.
+        self.assertIsNotNone(storage.claim_next('telegram','queue3',destination='@education_channel'))
+        with storage.db() as c:
+            c.execute("UPDATE publications SET created_at='2026-01-01' WHERE destination='@general_channel'")
+        item=storage.claim_next('telegram','queue4',destination='@general_channel')
+        self.assertEqual(item['category'],'Training')
