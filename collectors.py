@@ -7,11 +7,13 @@ from concurrent.futures import ThreadPoolExecutor
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from http_utils import get_bytes, get_json
 from settings import config, env
-from storage import add_opportunity, get_state, set_state, source_exists
+from storage import add_opportunity, get_state, set_state, source_exists, db, init_db
 from transform import extract, plain_text
+from opportunity_dates import source_is_recent, parse_deadline, reference_date
 from image_assets import MEDIA_DIR
 from telegram_media import source_image
 
@@ -36,6 +38,11 @@ def store(raw: str, source_key: str, source_name: str, source_url: str, cfg: dic
         data.update({k: v for k, v in fields.items() if v})
     data.update({'source_key': source_key, 'source_url': source_url,
                  'source_name': source_name, 'raw_text': raw[:14000]})
+    from routing import opportunity_category
+    data['category'] = opportunity_category(data)
+    reference=reference_date(data.get('source_posted_at'))
+    parsed=parse_deadline(raw,reference)
+    if parsed:data['deadline']=parsed
     return add_opportunity(data)
 
 
@@ -135,6 +142,26 @@ def fetch_public_sources(cfg=None):
         return sum(pool.map(_fetch_public_sources_serial, tasks))
 
 
+async def refresh_pending_source_dates(client, entity):
+    # Backfill missing metadata in unsent legacy records without resending them.
+    init_db()
+    prefix=f'telegram:{entity.id}:'
+    with db() as c:
+        rows=c.execute(
+            "SELECT id,source_key FROM opportunities o WHERE source_key LIKE ? "
+            "AND source_posted_at='' AND status IN ('approved','review') "
+            "AND NOT EXISTS (SELECT 1 FROM publications p WHERE p.opportunity_id=o.id) "
+            "ORDER BY id LIMIT 100",(prefix+'%',)).fetchall()
+    ids={int(row['source_key'].split(':')[-1]):row['id'] for row in rows
+         if row['source_key'].split(':')[-1].isdigit()}
+    if not ids:return
+    messages=await client.get_messages(entity,ids=list(ids))
+    with db() as c:
+        for message in messages:
+            if message and isinstance(getattr(message,'date',None),datetime) and message.id in ids:
+                c.execute("UPDATE opportunities SET source_posted_at=? WHERE id=? AND source_posted_at=''",
+                          (message.date.isoformat(),ids[message.id]))
+
 async def fetch_telegram_async(cfg: dict | None = None) -> int:
     cfg = cfg or config()
     channels = cfg['telegram_channels']
@@ -158,6 +185,8 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
             LOG.error('Telegram not signed in. Run: python setup_telegram.py')
             return 0
         total = 0
+        collection_now = datetime.now(timezone.utc)
+        cutoff = collection_now - timedelta(days=5)
         max_items = max(1, min(300, int(cfg.get('max_items_per_source', 30))))
         semaphore = asyncio.Semaphore(max(1, min(4, int(cfg.get("telegram_source_workers", 2)))))
         async def collect_channel(channel):
@@ -167,12 +196,15 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
             channel_total = 0
             try:
                 entity = await client.get_entity(channel)
+                await refresh_pending_source_dates(client, entity)
                 cursor_key = f'telegram:last_id:{entity.id}'
                 old_id = int(get_state(cursor_key, '0'))
-                messages = [m async for m in client.iter_messages(entity, min_id=old_id, limit=max_items, reverse=bool(old_id))]
+                messages = [m async for m in client.iter_messages(entity, min_id=old_id, limit=max_items, reverse=True, offset_date=cutoff)]
                 highest = old_id
                 for msg in sorted(messages, key=lambda m: m.id):
                     highest = max(highest, msg.id)
+                    if not source_is_recent(getattr(msg, 'date', None), collection_now):
+                        continue
                     raw = (msg.raw_text or '')[:13000]
                     if not raw:
                         continue
@@ -185,7 +217,7 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                     if not source_exists(source_key) and keyword_match(raw, cfg):
                         media_name = await source_image(client, entity, msg, messages)
                     channel_total += int(store(raw, source_key, channel, url, cfg,
-                                       fields={'image_path': media_name} if media_name else None,
+                                       fields={'image_path': media_name, 'source_posted_at': msg.date.isoformat()},
                                        source_html=getattr(msg, 'text_html', '') or ''))
                 if highest > old_id:
                     set_state(cursor_key, str(highest))

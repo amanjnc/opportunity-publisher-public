@@ -93,6 +93,8 @@ def init_db():
             c.execute("ALTER TABLE publications ADD COLUMN destination TEXT NOT NULL DEFAULT ''")
         # Older databases do not have image_path. Add it in place without clearing data.
         current = {row[1] for row in c.execute("PRAGMA table_info(opportunities)")}
+        if 'source_posted_at' not in current:
+            c.execute("ALTER TABLE opportunities ADD COLUMN source_posted_at TEXT NOT NULL DEFAULT ''")
         if 'deadline_note' not in current:
             c.execute("ALTER TABLE opportunities ADD COLUMN deadline_note TEXT NOT NULL DEFAULT ''")
         if "image_path" not in current:
@@ -124,7 +126,7 @@ def add_opportunity(data: dict) -> bool:
     value["fingerprint"] = fingerprint(value)
     columns = ("source_key", "fingerprint", "title", "organization", "category", "location", "deadline",
                "eligibility", "description", "apply_url", "source_name", "source_url", "raw_text",
-               "telegram_text", "linkedin_text", "image_path", "deadline_note")
+               "telegram_text", "linkedin_text", "image_path", "deadline_note", "source_posted_at")
     fields = [value.get(col, "") for col in columns]
     with db() as c:
         c.execute("BEGIN IMMEDIATE")
@@ -232,6 +234,14 @@ def claim_next(platform: str, slot_key: str, destination: str | None = None) -> 
             destination = telegram_destination(dict(row))
             c.execute("UPDATE publications SET destination=? WHERE opportunity_id=? AND platform=?", (destination, row['id'], platform))
         result = dict(row)
+        from routing import opportunity_category
+        result['category'] = opportunity_category(result)
+        from opportunity_dates import parse_deadline, reference_date
+        parsed = parse_deadline(result.get('raw_text', ''), reference_date(result.get('source_posted_at') or result.get('created_at')))
+        if parsed:
+            result['deadline'] = parsed
+        c.execute("UPDATE opportunities SET category=?,deadline=? WHERE id=?",
+                  (result['category'], result['deadline'], result['id']))
         if platform == 'telegram':
             result['publication_destination'] = destination
         return result

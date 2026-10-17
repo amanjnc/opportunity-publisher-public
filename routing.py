@@ -2,7 +2,7 @@
 import re
 from settings import env
 
-EDUCATION_CATEGORIES = frozenset(('scholarship', 'fellowship'))
+EDUCATION_CATEGORIES = frozenset(('scholarship', 'fellowship', 'education'))
 
 
 def valid_channel(value):
@@ -21,10 +21,28 @@ def telegram_routes():
     return {name: channel for name, channel in (('general', general), ('education', education)) if channel}
 
 
-def telegram_destination(opportunity):
+
+def opportunity_category(opportunity):
     from grouped_posts import is_grouped, group_category
-    raw = str(opportunity.get('raw_text') or '')
-    category = group_category(raw) if is_grouped(raw) else str(opportunity.get('category') or '')
-    route = 'education' if category.strip().casefold() in EDUCATION_CATEGORIES else 'general'
-    # Missing education secret holds those items; never fall back to the wrong channel.
+    from source_cleanup import clean_source
+    title=clean_source(str(opportunity.get('title') or ''))
+    raw=clean_source(str(opportunity.get('raw_text') or opportunity.get('description') or ''))
+    saved=str(opportunity.get('category') or '').strip()
+    # A university employer does not turn a real vacancy into a scholarship.
+    employment = re.search(r'(?i)\b(?:hiring|vacanc(?:y|ies)|job openings?|(?:scholarship|admissions?) (?:officer|manager)|software engineer|assistant professor|lecturer)\b',title)
+    if employment:return saved if saved not in ('Scholarship','Fellowship','Other') else 'Job'
+    if re.search(r'(?i)\bscholarships?\b',title):return 'Scholarship'
+    if re.search(r'(?i)\b(?:fellowships?|postdoctoral|research fellow)\b',title):return 'Fellowship'
+    # Admissions/degree study belongs to education even without a scholarship label.
+    if re.search(r'(?i)\b(?:admissions?|tuition fees?|study (?:in|at)|universities|bachelor|master|PhD|doctoral)\b',title):
+        return 'Education'
+    if is_grouped(raw):return group_category(raw)
+    if saved.casefold() in EDUCATION_CATEGORIES:return saved.title()
+    if re.search(r'(?i)\b(?:scholarships?|fellowships?)\b',raw) and not re.search(r'(?i)\b(?:hiring|vacanc(?:y|ies)|job description|responsibilities)\b',raw):
+        return 'Fellowship' if re.search(r'(?i)\bfellowships?\b',raw) else 'Scholarship'
+    return saved or 'Other'
+
+
+def telegram_destination(opportunity):
+    route = 'education' if opportunity_category(opportunity).casefold() in EDUCATION_CATEGORIES else 'general'
     return telegram_routes().get(route, '')

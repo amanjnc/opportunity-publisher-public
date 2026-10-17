@@ -44,7 +44,7 @@ TYPES = [
     ('Volunteering',r'\bvolunteer(?:s|ing)?\b'),
     ('Competitions',r'\b(?:competition|hackathon|innovation challenge)s?\b'),
 ]
-CATEGORY_TAGS={'Job':'Jobs','Internship':'Internships','Scholarship':'Scholarships',
+CATEGORY_TAGS={'Education':'Education','Job':'Jobs','Internship':'Internships','Scholarship':'Scholarships',
                'Fellowship':'Fellowships','Mentorship':'Mentorship','Grant':'Grants',
                'Competition':'Competitions','Training':'Training','Volunteering':'Volunteering'}
 

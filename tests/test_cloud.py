@@ -72,7 +72,9 @@ class TelegramCursorTests(unittest.IsolatedAsyncioTestCase):
         calls={}
         class Message:
             raw_text='A useful new opportunity'; entities=[]
-            def __init__(self,n): self.id=n
+            def __init__(self,n):
+                from datetime import datetime, timezone
+                self.id=n; self.date=datetime.now(timezone.utc)
         class Client:
             def __init__(self,*a,**kw):pass
             async def connect(self):pass
@@ -82,7 +84,7 @@ class TelegramCursorTests(unittest.IsolatedAsyncioTestCase):
             async def iter_messages(self,entity,**kwargs):
                 calls.update(kwargs)
                 for n in (101,102):yield Message(n)
-        with patch.dict(sys.modules,{'telethon':types.SimpleNamespace(TelegramClient=Client)}),patch('collectors.env',side_effect=lambda k:'1' if k=='TELEGRAM_API_ID' else 'hash'),patch('collectors.get_state',return_value='100'),patch('collectors.set_state') as state,patch('collectors.source_exists',return_value=True),patch('collectors.store',return_value=False):
+        with patch('collectors.refresh_pending_source_dates'),patch.dict(sys.modules,{'telethon':types.SimpleNamespace(TelegramClient=Client)}),patch('collectors.env',side_effect=lambda k:'1' if k=='TELEGRAM_API_ID' else 'hash'),patch('collectors.get_state',return_value='100'),patch('collectors.set_state') as state,patch('collectors.source_exists',return_value=True),patch('collectors.store',return_value=False):
             result=await collectors.fetch_telegram_async({'telegram_channels':['source'],'max_items_per_source':2})
         self.assertTrue(calls['reverse']);self.assertEqual(calls['min_id'],100)
         state.assert_called_once_with('telegram:last_id:7','102')

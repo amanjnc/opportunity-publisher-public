@@ -21,7 +21,7 @@ from settings import env
 
 LOG = logging.getLogger(__name__)
 CATEGORIES = ['Job', 'Internship', 'Scholarship', 'Fellowship', 'Mentorship', 'Grant',
-              'Competition', 'Training', 'Volunteering', 'Other']
+              'Competition', 'Training', 'Volunteering', 'Education', 'Other']
 FIELDS = ['title', 'organization', 'category', 'location', 'deadline', 'eligibility', 'description', 'apply_url']
 URL_RE = re.compile(r'https?://[^\s<>"\']+', re.I)
 BANNER_RE = re.compile(r'(?<!\w)#[\w_]+', re.U)
@@ -120,6 +120,7 @@ def _category(raw: str, title: str) -> str:
         (r'\bfellowships?\b', 'Fellowship'),
         (r'\binternships?\b|\bintern\b', 'Internship'),
         (r'\bscholarships?\b', 'Scholarship'),
+        (r'\badmissions?\b|\btuition fees?\b', 'Education'),
         (r'\bgrants?\b|\bfunding\s+call\b', 'Grant'),
         (r'\bcompetitions?\b|\bchallenge\b|\bhackathon\b', 'Competition'),
         (r'\btraining\b|\bworkshop\b|\bbootcamp\b|\bcourse\b|\bwebinar\b', 'Training'),
@@ -174,25 +175,8 @@ def labeled_value(raw: str, kind: str) -> str:
     return ''
 
 def _deadline(raw: str) -> str:
-    value = labeled_value(raw, 'deadline')
-    if not value:
-        # A labeled deadline may also occur inside a sentence.
-        found = re.search(r'(?i)(?:' + LABELS['deadline'] + r')\s*[:\-–]?\s*(.+)', ' '.join(source_lines(raw)))
-        value = found.group(1) if found else ''
-    # Do not interpret an Ethiopian-calendar date as Gregorian.
-    if re.search(r'(?i)ዓ\.?\s*ም|E\.?C\.?\b|Ethiopian calendar', value):
-        return ''
-    value = re.sub(r'(?<=\d)(?:st|nd|rd|th)\b', '', value, flags=re.I)
-    found = re.search(r'\b(20\d{2}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]+[,]?\s+20\d{2}|[A-Za-z]+\s+\d{1,2}[,]?\s+20\d{2})\b', value)
-    if not found:
-        return ''
-    date_text = found.group(1).replace(',', '')
-    for fmt in ('%Y-%m-%d', '%d %B %Y', '%d %b %Y', '%B %d %Y', '%b %d %Y'):
-        try:
-            return datetime.strptime(date_text, fmt).date().isoformat()
-        except ValueError:
-            pass
-    return ''
+    from opportunity_dates import parse_deadline
+    return parse_deadline(raw)
 
 def _eligibility(raw: str) -> str:
     explicit = labeled_value(raw, 'eligibility')
