@@ -211,7 +211,7 @@ def _summary(raw: str, title: str, limit: int | None = None) -> str:
 
 def basic_extract(raw: str, source_name: str, default_url: str = '', title_hint: str = '') -> dict:
     from source_cleanup import clean_source
-    raw = clean_source(raw)
+    raw = clean_source(raw, source_name)
     title = _smart_title(raw, title_hint)
     return {
         'title': title,
