@@ -216,6 +216,14 @@ def claim_next(platform: str, slot_key: str, destination: str | None = None) -> 
                 SELECT 1 FROM publications p WHERE p.opportunity_id=o.id AND p.platform=?
             ) ORDER BY o.created_at ASC, o.id ASC
         """, (today, platform)).fetchall()
+        from settings import config
+        priority_sources = {str(name).strip().lstrip('@').casefold()
+                            for name in config().get('priority_telegram_channels', [])}
+        # The SQL order is FIFO; stable sorting keeps FIFO within each tier.
+        if platform == 'telegram' and priority_sources:
+            row = sorted(row, key=lambda r:
+                         str(r['source_name']).strip().lstrip('@').casefold()
+                         not in priority_sources)
         previous = c.execute("SELECT o.* FROM publications p JOIN opportunities o ON o.id=p.opportunity_id WHERE p.platform=?", (platform,)).fetchall()
         from post_content import application_url
         from routing import telegram_destination
