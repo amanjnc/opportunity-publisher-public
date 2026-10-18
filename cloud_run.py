@@ -53,6 +53,53 @@ def auto_approve():
     return count
 
 
+def report_queues():
+    """Read-only diagnostics using the same eligibility rules as publishing."""
+    from collections import Counter
+    from dedup import find_match
+    from opportunity_quality import publication_block_reason
+    from routing import telegram_destination, telegram_routes
+    from settings import config
+    with db() as c:
+        items = [dict(r) for r in c.execute("SELECT * FROM opportunities ORDER BY created_at,id")]
+        attempts = {r['opportunity_id']: dict(r) for r in c.execute("SELECT * FROM publications WHERE platform='telegram'")}
+    previous = [item for item in items if item['id'] in attempts]
+    routes = telegram_routes()
+    ready = {route: [] for route in routes}
+    reasons = {route: Counter() for route in routes}
+    priority = {str(x).strip().lstrip('@').casefold() for x in config().get('priority_telegram_channels', [])}
+    items.sort(key=lambda item: str(item.get('source_name', '')).strip().lstrip('@').casefold() not in priority)
+    for item in items:
+        destination = telegram_destination(item)
+        route = next((key for key,value in routes.items() if value == destination), 'unconfigured')
+        if route not in reasons:
+            reasons[route] = Counter()
+        attempt = attempts.get(item['id'])
+        if attempt:
+            reason = 'previous attempt: ' + attempt['status']
+        elif item['status'] == 'rejected':
+            reason = 'rejected'
+        elif not application_url(item):
+            reason = 'missing application link'
+        else:
+            reason = publication_block_reason(item)
+            if not reason and find_match(item, previous):
+                reason = 'duplicate of previously attempted opportunity'
+            if not reason and item['status'] != 'approved':
+                reason = 'awaiting approval or duplicate review'
+        if reason:
+            reasons[route][reason] += 1
+        elif route in ready:
+            ready[route].append(item)
+        if 'stability mechanism' in item['title'].casefold() or 'esm traineeship' in item['title'].casefold():
+            print('ESM queue diagnostic:', {'id': item['id'], 'route': route, 'reason': reason or 'eligible'}, flush=True)
+    for route in reasons:
+        queue = ready.get(route, [])
+        print('Queue diagnostic:', {'channel': route, 'eligible_waiting': len(queue),
+              'excluded_counts': dict(reasons[route]),
+              'next_posts': [{'rank': n, 'id': item['id'], 'title': item['title']} for n,item in enumerate(queue[:10],1)]}, flush=True)
+
+
 def run(checkpoint=None):
     init_db()
     sync_roundup_destination()
@@ -101,6 +148,7 @@ def run(checkpoint=None):
             print('Collection not due; using the saved queue.', flush=True)
         signal.alarm(max(1, int(budget - (time.monotonic() - started))))
         print('Automatically approved:', auto_approve(), flush=True)
+        report_queues()
         if not enabled('AUTO_PUBLISH'):
             print('Publishing disabled; collection-only run.')
             return
@@ -116,7 +164,7 @@ def run(checkpoint=None):
                 if time.monotonic() - started > budget - 55:
                     return
                 message = publish.publish_one(platform, f'queue:{slot}:{route}', destination=destination)
-                print(message, flush=True)
+                print(f'{route}: {message}', flush=True)
         if time.monotonic() - started < budget - 45:
             # Persist roundup claim before its network send as well.
             import roundup
