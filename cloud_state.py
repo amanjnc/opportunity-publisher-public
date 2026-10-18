@@ -2,6 +2,7 @@
 Never fall back to an empty database after a restore failure.
 """
 import base64
+import hashlib
 import io
 import json
 import os
@@ -44,6 +45,64 @@ def repo():
     return name
 
 
+def compact_image(binary):
+    """Compress large source photos, keeping small or unreadable files intact."""
+    if len(binary) <= 400_000:
+        return binary
+    try:
+        from PIL import Image, ImageOps
+        with Image.open(io.BytesIO(binary)) as source:
+            if getattr(source, 'is_animated', False):
+                return binary
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((1600, 1600))
+            if image.mode in ('RGBA', 'LA') or 'transparency' in image.info:
+                rgba = image.convert('RGBA')
+                background = Image.new('RGB', rgba.size, 'white')
+                background.paste(rgba, mask=rgba.getchannel('A'))
+                image = background
+            else:
+                image = image.convert('RGB')
+            output = io.BytesIO()
+            image.save(output, format='JPEG', quality=85, optimize=True)
+            candidate = output.getvalue()
+            return candidate if len(candidate) < len(binary) else binary
+    except Exception:
+        return binary
+
+
+def archived_images(snapshot, data):
+    """Build unique media entries; adjust only the archived database copy."""
+    from opportunity_dates import deadline_problem
+    snapshot.row_factory = sqlite3.Row
+    rows = snapshot.execute(
+        "SELECT * FROM opportunities WHERE status<>'rejected' AND id NOT IN "
+        "(SELECT opportunity_id FROM publications WHERE platform='telegram' AND status='posted')"
+    ).fetchall()
+    media, hashes, names = {}, {}, {}
+    for row in rows:
+        if deadline_problem(dict(row)) == 'Application deadline has already passed.':
+            continue
+        name = row['image_path']
+        if not name or Path(name).name != name:
+            continue
+        path = data / 'media' / name
+        if not path.is_file():
+            continue
+        if name not in names:
+            binary = compact_image(path.read_bytes())
+            digest = hashlib.sha256(binary).digest()
+            canonical = hashes.setdefault(digest, name)
+            names[name] = canonical
+            media.setdefault(canonical, binary)
+        canonical = names[name]
+        if canonical != name:
+            snapshot.execute('UPDATE opportunities SET image_path=? WHERE id=?',
+                             (canonical, row['id']))
+    snapshot.commit()
+    return media
+
+
 def pack():
     data = ROOT / 'data'
     memory = io.BytesIO()
@@ -53,9 +112,9 @@ def pack():
         snapshot = sqlite3.connect(':memory:')
         with sqlite3.connect(DB_PATH) as source:
             source.backup(snapshot)
-        # serialize avoids copying live WAL files.
+        media = archived_images(snapshot, data)
+        # serialize avoids copying live WAL files. All records/history remain.
         archive.writestr('opportunities.db', snapshot.serialize())
-        rows = snapshot.execute("SELECT image_path FROM opportunities WHERE status<>'rejected' AND id NOT IN (SELECT opportunity_id FROM publications WHERE platform='telegram' AND status='posted')").fetchall()
         snapshot.close()
         session = data / 'collector.session'
         if session.exists():
@@ -65,11 +124,8 @@ def pack():
                 source.backup(target)
                 archive.writestr('collector.session', target.serialize())
                 target.close()
-        for (name,) in rows:
-            if name and Path(name).name == name:
-                path = data / 'media' / name
-                if path.is_file():
-                    archive.write(path, 'media/' + name)
+        for name, binary in media.items():
+            archive.writestr('media/' + name, binary)
     binary = Fernet(os.environ['STATE_ENCRYPTION_KEY'].encode()).encrypt(memory.getvalue())
     if len(binary) > MAX_BYTES:
         raise RuntimeError('Encrypted state exceeds 25 MB; move state to dedicated storage before continuing.')
