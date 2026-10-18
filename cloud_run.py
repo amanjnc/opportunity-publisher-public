@@ -87,6 +87,14 @@ def report_queues():
                 reason = 'duplicate of previously attempted opportunity'
             if not reason and item['status'] != 'approved':
                 reason = 'awaiting approval or duplicate review'
+        try:
+            collected_since = float(get_state('cloud:last_collection_attempt', '0'))
+            created = datetime.fromisoformat(item['created_at']).timestamp()
+        except (ValueError, TypeError):
+            collected_since, created = float('inf'), 0
+        if created >= collected_since:
+            print('Latest collection item:', {'id': item['id'], 'title': item['title'],
+                  'reason': reason or 'eligible'}, flush=True)
         if reason:
             reasons[route][reason] += 1
         elif route in ready:
