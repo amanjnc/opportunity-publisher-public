@@ -3,7 +3,7 @@ import re
 from datetime import datetime, date, timedelta, timezone
 
 TZ=timezone(timedelta(hours=3))
-LABEL=re.compile(r'(?i)(?:application |registration |admission )?deadline|apply by|applications? clos(?:e|es|ing)(?: on)?|closing date|last date(?: to apply)?')
+LABEL=re.compile(r'(?i)(?:application |registration |admission )?deadlines?\b|apply by|applications? clos(?:e|es|ing)(?: on)?|closing date|last date(?: to apply)?')
 DATE=re.compile(r'\b(?:20\d{2}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]20\d{2}|\d{1,2}\s+[A-Za-z]+[,]?\s+20\d{2}|[A-Za-z]+\s+\d{1,2}[,]?\s+20\d{2})\b')
 FORMATS=('%Y-%m-%d','%Y/%m/%d','%d %B %Y','%d %b %Y','%B %d %Y','%b %d %Y')
 
@@ -72,7 +72,7 @@ def deadline_problem(opp,now=None):
         try:dates.append(date.fromisoformat(stored))
         except ValueError:return 'Invalid saved deadline.'
     for value in values:
-        if re.fullmatch(r'(?i)(?:not specified|unknown|n/?a|rolling(?: applications)?|open until filled|ongoing|varies|various)\W*',value):
+        if re.fullmatch(r'(?i)(?:not specified|not (?:mentioned|provided|announced)|no deadline|unknown|n/?a|rolling(?: applications)?|open until filled|ongoing|var(?:y|ies|ious)(?: by (?:position|role|vacancy|programme|program))?(?:s)?(?:\s*[—–-]\s*apply early)?)\W*',value):
             continue
         parsed=parse_value(value,reference)
         if parsed:dates.append(parsed)
