@@ -49,8 +49,10 @@ def publication_block_reason(opp):
     ))
     # A provider name is not sufficient for an academic funding announcement.
     # Require useful application facts when there is no verified closing date.
-    academic = str(opp.get('category') or '').casefold() in ('scholarship', 'fellowship') or bool(
-        re.search(r'(?i)\b(?:scholarships?|fellowships?|financial aid)\b',text))
+    # Use the same current classification as routing, not stale saved labels or
+    # incidental scholarship advertising in a professional placement's footer.
+    from routing import opportunity_category
+    academic = opportunity_category(opp).casefold() in ('scholarship', 'fellowship')
     eligibility = str(opp.get('eligibility') or '').strip()
     has_eligibility = bool(eligibility and eligibility.casefold() not in
                            ('unknown','not specified','n/a','everyone','all'))
