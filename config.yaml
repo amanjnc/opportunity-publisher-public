@@ -9,6 +9,8 @@ telegram_channels:
   - "@WorkLinkETH"
   - "@AbiLink7"
   - "@jobs_in_ethio"
+  - "@OHUB4AllET"
+  - "@joblinkET"
 
 # RSS feeds from publishers who permit reuse of opportunity announcements.
 rss_feeds: []
