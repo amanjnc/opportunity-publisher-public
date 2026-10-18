@@ -39,33 +39,13 @@ def publication_block_reason(opp):
         r'(?im)\b(?:organization|organisation|institution|employer|company|host|organized by)\s*:\s*[A-Za-z][^\n]{3,}|'
         r'\b(?:University of|Ministry of|African Union|World Bank|United Nations|UNICEF|UNDP|FAO)\b|'
         r'\b(?:at|by|from)\s+[A-Z][\w&.-]+(?:\s+[A-Z][\w&.-]+){0,5}\s+(?:University|College|Foundation|Institute|PLC|Ltd|Inc)\b',text))
-    deadline=bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}',str(opp.get('deadline') or '')))
-    # Different kinds of concrete details count once each. Length alone is not evidence.
-    facts=sum(bool(re.search(pattern,text,re.I)) for pattern in (
-        r'\b(?:responsibilities|duties|you will|deliverables|fields of (?:study|training))\b',
-        r'\b(?:qualifications|requirements|must have|must hold|eligible applicants|eligibility|years? (?:of )?experience|degree in)\b',
-        r'\b(?:salary|stipend|tuition|accommodation|benefits|funding covers)\b',
-        r'\b(?:duration|start date|work location|working hours|contract type)\s*:',
-    ))
-    # A provider name is not sufficient for an academic funding announcement.
-    # Require useful application facts when there is no verified closing date.
-    # Use the same current classification as routing, not stale saved labels or
-    # incidental scholarship advertising in a professional placement's footer.
-    from routing import opportunity_category
-    academic = opportunity_category(opp).casefold() in ('scholarship', 'fellowship')
-    eligibility = str(opp.get('eligibility') or '').strip()
-    has_eligibility = bool(eligibility and eligibility.casefold() not in
-                           ('unknown','not specified','n/a','everyone','all'))
-    eligibility_in_text = bool(re.search(
-        r'(?i)\b(?:eligible|open to|applicants must|students enrolled|graduates in|bachelor.?s degree|master.?s degree|PhD candidates)\b',text))
-    substantive_funding = bool(re.search(
-        r'(?i)(?:\b(?:stipend|tuition waiver|full tuition|monthly allowance|accommodation provided|fully funded)\b|[$€£]\s*\d|\d[\d,.]*\s*(?:EUR|USD|ETB)\b)',text))
-    application_steps = bool(re.search(
-        r'(?i)\b(?:submit|upload|complete|send)\b.{0,65}\b(?:application|documents|transcript|CV|form|proposal)\b',text))
-    academic_details = sum((has_eligibility or eligibility_in_text,
-                            substantive_funding, application_steps))
-    if academic and not deadline and academic_details < 2:
-        return 'Incomplete funding announcement: no deadline and insufficient eligibility, funding or application details.'
-    if not named and not deadline and facts < 2:
-        return 'Vague announcement: no identifiable institution, no deadline and insufficient concrete details.'
+    # Brief genuine calls remain eligible without a prescribed detail count.
+    actionable = bool(re.search(
+        r'(?i)\b(?:apply(?: now| here)?|applications? (?:are |is )?(?:open|invited|available)|call for applications|register|registration|submit (?:your |an? )?application|vacanc(?:y|ies)|hiring|recruiting|recruitment)\b', text))
+    opportunity = bool(re.search(
+        r'(?i)\b(?:scholarships?|scholars program|fellowships?|traineeships?|internships?|grants?|admissions?|jobs?|vacanc(?:y|ies)|volunteers?|training|workshops?|conferences?|competitions?|challenges?|mentorship|exchange programs?)\b', text))
+    if not actionable and not concrete_role:
+        return 'Informational announcement without an identifiable application or recruitment call.'
+    if not (named or concrete_role or opportunity):
+        return 'Promotional or vague announcement without an identifiable opportunity.'
     return ''
