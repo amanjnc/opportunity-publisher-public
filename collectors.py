@@ -201,7 +201,7 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                 old_id = int(get_state(cursor_key, '0'))
                 # Bootstrap from the age cutoff; subsequent pages use only the
                 # saved message ID. Do not combine independent date and ID offsets.
-                offsets = {'min_id': old_id} if old_id else {'offset_date': cutoff}
+                offsets = {'min_id': old_id} if old_id else {'offset_date': collection_now - timedelta(hours=48)}
                 messages = [m async for m in client.iter_messages(entity, limit=max_items, reverse=True, **offsets)]
                 scanned_recent = 0
                 skipped_old = 0
@@ -228,6 +228,7 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                                        source_html=getattr(msg, 'text_html', '') or ''))
                 if highest > old_id:
                     set_state(cursor_key, str(highest))
+                set_state('telegram:source_initialized:' + str(channel).strip().casefold(), '1')
                 LOG.info('Telegram collection %s: scanned=%s recent=%s new=%s skipped_old=%s cursor=%s->%s first_date=%s last_date=%s',
                          channel, len(messages), scanned_recent, channel_total, skipped_old, old_id, highest,
                          getattr(messages[0], 'date', '') if messages else '',
