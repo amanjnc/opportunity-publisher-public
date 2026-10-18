@@ -108,6 +108,29 @@ def report_queues():
               'next_posts': [{'rank': n, 'id': item['id'], 'title': item['title']} for n,item in enumerate(queue[:10],1)]}, flush=True)
 
 
+def restore_requested_aixbio():
+    """Repair the exact existing record confirmed by the owner; never resend."""
+    url = 'https://opportunities.ohubet.com/opportunities/aixbio-research-fellowship-2027'
+    marker = 'repair:user-requested-aixbio-2027:v1'
+    if get_state(marker):
+        return
+    with db() as c:
+        rows = c.execute("SELECT * FROM opportunities WHERE apply_url=? OR raw_text LIKE ? ORDER BY id",
+                         (url, '%' + url + '%')).fetchall()
+        if not rows:
+            print('Requested AIxBio record not found; no replacement or duplicate created.', flush=True)
+            return
+        row = rows[0]
+        if c.execute("SELECT 1 FROM publications WHERE opportunity_id=? AND platform='telegram'", (row['id'],)).fetchone():
+            print('Requested AIxBio already attempted; publication history retained.', flush=True)
+            set_state(marker, 'already-attempted')
+            return
+        c.execute("UPDATE opportunities SET title=?,category='Fellowship',deadline='2026-10-19',deadline_note='',apply_url=?,status='approved' WHERE id=?",
+                  ('AIxBio Research Fellowship 2027 — Fully Funded £10,000 Fellowship in the UK', url, row['id']))
+    set_state(marker, 'repaired')
+    print('Requested AIxBio record restored to approved fellowship queue; normal expiry and duplicate checks still apply.', flush=True)
+
+
 def run(checkpoint=None):
     init_db()
     sync_roundup_destination()
@@ -156,6 +179,7 @@ def run(checkpoint=None):
         else:
             print('Collection not due; using the saved queue.', flush=True)
         signal.alarm(max(1, int(budget - (time.monotonic() - started))))
+        restore_requested_aixbio()
         print('Automatically approved:', auto_approve(), flush=True)
         report_queues()
         if not enabled('AUTO_PUBLISH'):
