@@ -11,6 +11,9 @@ telegram_channels:
   - "@jobs_in_ethio"
   - "@OHUB4AllET"
   - "@joblinkET"
+  - "@josad_software"
+  - "@josad_digital"
+  - "@mikijobsmj"
 
 # RSS feeds from publishers who permit reuse of opportunity announcements.
 rss_feeds: []
@@ -42,3 +45,11 @@ cloud_auto_approve: 1
 
 # Weekly per-channel roundup: Monday, Ethiopia time.
 roundup_hour: 8
+
+# Eligible posts from these sources are selected before other sources.
+priority_telegram_channels:
+  - "@OHUB4AllET"
+  - "@opportunity_alerts"
+  - "@Rez_On_Bridge"
+  - "@AbiLink7"
+  - "@blu_aspire_abroad"
