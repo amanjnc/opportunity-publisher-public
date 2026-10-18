@@ -27,7 +27,7 @@ lever_sites: []
 
 # Publishing hours are in Ethiopia local time (Africa/Addis_Ababa).
 publish_hours: [8, 10, 12, 14, 16, 18, 20]
-collect_every_minutes: 30
+collect_every_minutes: 120
 max_items_per_source: 30
 max_message_characters: 6000
 
@@ -36,7 +36,7 @@ required_keywords: []
 #  - scholarship
 #  - internship
 
-# Cloud: collect every 30 minutes; publish one queued item per channel every five minutes.
+# Cloud: collect every two hours; publish one queued item per channel per workflow run.
 cloud_work_seconds: 300
 public_source_workers: 4
 telegram_source_workers: 2
