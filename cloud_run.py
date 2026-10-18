@@ -144,7 +144,9 @@ def run(checkpoint=None):
         signal.alarm(budget)
         last_collection = float(get_state('cloud:last_collection_attempt', '0'))
         collection_interval = max(5, int(cfg.get('collect_every_minutes', 120))) * 60
-        if time.time() - last_collection >= collection_interval:
+        new_sources = [channel for channel in cfg.get('telegram_channels', [])
+                       if not get_state('telegram:source_initialized:' + str(channel).strip().casefold())]
+        if time.time() - last_collection >= collection_interval or new_sources:
             # Persist attempt time before collecting, even if a source times out.
             set_state('cloud:last_collection_attempt', str(time.time()))
             if checkpoint:
