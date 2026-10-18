@@ -135,7 +135,8 @@ def run(checkpoint=None):
         # Reserve up to 120 seconds for publishing and state saves.
         signal.alarm(budget)
         last_collection = float(get_state('cloud:last_collection_attempt', '0'))
-        if time.time() - last_collection >= 30 * 60:
+        collection_interval = max(5, int(cfg.get('collect_every_minutes', 120))) * 60
+        if time.time() - last_collection >= collection_interval:
             # Persist attempt time before collecting, even if a source times out.
             set_state('cloud:last_collection_attempt', str(time.time()))
             if checkpoint:
