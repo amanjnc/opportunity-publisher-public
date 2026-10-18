@@ -199,12 +199,19 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                 await refresh_pending_source_dates(client, entity)
                 cursor_key = f'telegram:last_id:{entity.id}'
                 old_id = int(get_state(cursor_key, '0'))
-                messages = [m async for m in client.iter_messages(entity, min_id=old_id, limit=max_items, reverse=True, offset_date=cutoff)]
+                # Bootstrap from the age cutoff; subsequent pages use only the
+                # saved message ID. Do not combine independent date and ID offsets.
+                offsets = {'min_id': old_id} if old_id else {'offset_date': cutoff}
+                messages = [m async for m in client.iter_messages(entity, limit=max_items, reverse=True, **offsets)]
+                scanned_recent = 0
+                skipped_old = 0
                 highest = old_id
                 for msg in sorted(messages, key=lambda m: m.id):
                     highest = max(highest, msg.id)
                     if not source_is_recent(getattr(msg, 'date', None), collection_now):
+                        skipped_old += 1
                         continue
+                    scanned_recent += 1
                     raw = (msg.raw_text or '')[:13000]
                     if not raw:
                         continue
@@ -221,6 +228,10 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                                        source_html=getattr(msg, 'text_html', '') or ''))
                 if highest > old_id:
                     set_state(cursor_key, str(highest))
+                LOG.info('Telegram collection %s: scanned=%s recent=%s new=%s skipped_old=%s cursor=%s->%s first_date=%s last_date=%s',
+                         channel, len(messages), scanned_recent, channel_total, skipped_old, old_id, highest,
+                         getattr(messages[0], 'date', '') if messages else '',
+                         getattr(messages[-1], 'date', '') if messages else '')
             except Exception as exc:
                 LOG.error('Could not collect Telegram channel %s (%s)', channel, type(exc).__name__)
             return channel_total
