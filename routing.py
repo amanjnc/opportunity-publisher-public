@@ -27,7 +27,8 @@ def opportunity_category(opportunity):
     from grouped_posts import is_grouped, group_category
     from source_cleanup import clean_source
     title=clean_source(str(opportunity.get('title') or ''))
-    raw=clean_source(str(opportunity.get('raw_text') or opportunity.get('description') or ''))
+    raw=clean_source('\n'.join(str(opportunity.get(key) or '') for key in
+                              ('title', 'raw_text', 'description', 'eligibility', 'telegram_text')))
     title=unicodedata.normalize('NFKC', title)
     raw=unicodedata.normalize('NFKC', raw)
     saved=str(opportunity.get('category') or '').strip()
@@ -44,7 +45,7 @@ def opportunity_category(opportunity):
         return 'Education'
     # Funding/study signals in the body outweigh incidental references to jobs.
     # Actual vacancy titles have already been handled above.
-    if re.search(r'(?i)\b(?:scholarships?|undergraduate|bachelor[’\x27]?s?|master[’\x27]?s?|phd|doctoral)\b', raw) and re.search(r'(?i)\b(?:scholarships?|financial aid|tuition waiver|fully funded|funded (?:study|degree)|international scholars)\b',raw):
+    if re.search(r'(?i)\b(?:scholarships?|(?:international )?scholars(?: program(?:me)?)?|undergrads?|undergraduates?|bachelor[’\x27]?s?|master[’\x27]?s?|phd|doctoral)\b', raw) and re.search(r'(?i)\b(?:scholarships?|need[ -]based (?:funding|aid)|financial aid|tuition waiver|fully funded|funded (?:study|degree)|international scholars)\b',raw):
         return 'Scholarship'
     if is_grouped(raw):return group_category(raw)
     if saved.casefold() in EDUCATION_CATEGORIES:return saved.title()
