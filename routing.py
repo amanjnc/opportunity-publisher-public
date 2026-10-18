@@ -1,5 +1,6 @@
 """Category routing for future Telegram posts; historical destinations stay attached."""
 import re
+import unicodedata
 from settings import env
 
 EDUCATION_CATEGORIES = frozenset(('scholarship', 'fellowship', 'education'))
@@ -27,7 +28,12 @@ def opportunity_category(opportunity):
     from source_cleanup import clean_source
     title=clean_source(str(opportunity.get('title') or ''))
     raw=clean_source(str(opportunity.get('raw_text') or opportunity.get('description') or ''))
+    title=unicodedata.normalize('NFKC', title)
+    raw=unicodedata.normalize('NFKC', raw)
     saved=str(opportunity.get('category') or '').strip()
+    # Ethiopian source titles often announce scholarships entirely in Amharic.
+    amharic_study = re.search(r'(?:ነ[ፃጻ]\s+(?:የ)?ትምህርት|የትምህርት\s+[እዕ]ድል|ስኮላርሺፕ|ስኮላርሽፕ)',title)
+    if amharic_study:return 'Scholarship'
     # A university employer does not turn a real vacancy into a scholarship.
     employment = re.search(r'(?i)\b(?:hiring|vacanc(?:y|ies)|job openings?|(?:scholarship|admissions?) (?:officer|manager)|software engineer|assistant professor|lecturer)\b',title)
     if employment:return saved if saved not in ('Scholarship','Fellowship','Other') else 'Job'
@@ -36,6 +42,10 @@ def opportunity_category(opportunity):
     # Admissions/degree study belongs to education even without a scholarship label.
     if re.search(r'(?i)\b(?:admissions?|tuition fees?|study (?:in|at)|universities|bachelor|master|PhD|doctoral)\b',title):
         return 'Education'
+    # Funding/study signals in the body outweigh incidental references to jobs.
+    # Actual vacancy titles have already been handled above.
+    if re.search(r'(?i)\b(?:scholarships?|undergraduate|bachelor[’\x27]?s?|master[’\x27]?s?|phd|doctoral)\b', raw) and re.search(r'(?i)\b(?:scholarships?|financial aid|tuition waiver|fully funded|funded (?:study|degree)|international scholars)\b',raw):
+        return 'Scholarship'
     if is_grouped(raw):return group_category(raw)
     if saved.casefold() in EDUCATION_CATEGORIES:return saved.title()
     if re.search(r'(?i)\b(?:scholarships?|fellowships?)\b',raw) and not re.search(r'(?i)\b(?:hiring|vacanc(?:y|ies)|job description|responsibilities)\b',raw):
