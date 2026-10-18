@@ -65,14 +65,14 @@ class SocialAnnouncementTests(unittest.TestCase):
         self.assertEqual(clean_source('Details\nhttps://vt.tiktok.com/abc'),'Details')
 
 class IncompleteFundingTests(unittest.TestCase):
-    def test_ersu_messina_announcement_blocked_even_with_provider_and_link(self):
+    def test_ersu_messina_brief_call_allowed_with_provider_and_link(self):
         opp={'title':'ERSU MESSINA','category':'Scholarship','organization':'ERSU Messina',
              'description':'The call for applications for scholarships, other financial aid, and services for the right to university education for the 2026/2027 academic year has been published.',
              'apply_url':'https://example.org/call','deadline':''}
-        self.assertTrue(publication_block_reason(opp))
-    def test_named_fellowship_empty_announcement_blocked(self):
-        self.assertTrue(publication_block_reason({'title':'Research fellowship','organization':'Example Institute','category':'Fellowship','description':'Our fellowship call has been announced. Apply now.'}))
+        self.assertFalse(publication_block_reason(opp))
+    def test_named_brief_fellowship_call_allowed(self):
+        self.assertFalse(publication_block_reason({'title':'Research fellowship','organization':'Example Institute','category':'Fellowship','description':'Our fellowship call has been announced. Apply now.'}))
     def test_detailed_rolling_funding_allowed(self):
         self.assertFalse(publication_block_reason({'title':'Research fellowship','organization':'Example Institute','category':'Fellowship','description':'Open to PhD candidates. Monthly stipend USD 1200. Submit your CV and proposal. Rolling applications.'}))
-    def test_generic_financial_aid_does_not_count_as_funding_details(self):
-        self.assertTrue(publication_block_reason({'title':'University scholarships','organization':'Example University','category':'Scholarship','description':'Open to students. Financial aid available. Applications announced.'}))
+    def test_missing_funding_amount_does_not_block_genuine_call(self):
+        self.assertFalse(publication_block_reason({'title':'University scholarships','organization':'Example University','category':'Scholarship','description':'Open to students. Financial aid available. Applications announced.'}))

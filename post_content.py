@@ -43,7 +43,7 @@ def clean_details(opp):
     if raw.rstrip().endswith(('…','...')) and len(str(opp.get('raw_text') or ''))>len(raw):
         raw=str(opp['raw_text'])
     from source_cleanup import clean_source
-    raw=clean_source(PROMO_RE.sub('',raw))
+    raw=clean_source(PROMO_RE.sub('',raw), opp.get('source_name', ''))
     result=[]
     for line in source_lines(raw):
         if line.startswith('@') or re.match(r'(?i)^follow\s+us',line):
@@ -54,7 +54,7 @@ def clean_details(opp):
             host=(urlsplit(link).hostname or '').lower()
             if link==selected or (host in SOCIAL_SOURCES and (re.search(r'/\d+/?$',urlsplit(link).path) or link.rstrip('/')==str(opp.get('source_url') or '').rstrip('/'))):
                 return ''
-            return found.group(0)
+            return ''  # One selected application link, rendered below the details.
         line=_tidy(URL_RE.sub(keep_useful_link,line))
         line=re.sub(r'^["“”]+|["“”]+$','',line).strip()
         if not line or _key(line)==_key(str(opp.get('title') or '')):
@@ -72,7 +72,7 @@ def clean_details(opp):
             result.append(line)
     # Recover financial facts from original text even if an older description
     # was shortened. Include the full amount/type/period line, never just a number.
-    for line in source_lines(clean_source(str(opp.get('raw_text') or ''))):
+    for line in source_lines(clean_source(str(opp.get('raw_text') or ''), opp.get('source_name', ''))):
         if MONEY_RE.search(line):
             value=_tidy(PROMO_RE.sub('',line),remove_urls=True)
             if value and not any(_key(value) in _key(existing) for existing in result):
@@ -225,7 +225,8 @@ def render_post(opp,platform,today=None):
     url=application_url(opp)
     category=str(opp.get('category') or 'Other')
     title=str(opp.get('title') or 'Opportunity — title needs review').strip()
-    who=PROMO_RE.sub('',str(opp.get('eligibility') or '')).strip(' ;,\n')
+    from source_cleanup import clean_source
+    who=clean_source(PROMO_RE.sub('',str(opp.get('eligibility') or '')), opp.get('source_name', '')).strip(' ;,\n')
     where=str(opp.get('location') or '').strip()
     deadline,urgency=deadline_display(str(opp.get('deadline') or ''),today=today)
     if not opp.get('deadline'):

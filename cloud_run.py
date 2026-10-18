@@ -179,6 +179,13 @@ def run(checkpoint=None):
         else:
             print('Collection not due; using the saved queue.', flush=True)
         signal.alarm(max(1, int(budget - (time.monotonic() - started))))
+        from repair_source_posts import repair_requested_posts
+        if enabled('AUTO_PUBLISH'):
+            try:
+                repair_requested_posts(checkpoint)
+            except Exception as exc:
+                # Avoid echoing network URLs or credentials in public logs.
+                print('Requested source-post repair incomplete:',type(exc).__name__,flush=True)
         restore_requested_aixbio()
         print('Automatically approved:', auto_approve(), flush=True)
         report_queues()
