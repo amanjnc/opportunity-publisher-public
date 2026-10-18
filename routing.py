@@ -39,6 +39,7 @@ def opportunity_category(opportunity):
     employment = re.search(r'(?i)\b(?:hiring|vacanc(?:y|ies)|job openings?|(?:scholarship|admissions?) (?:officer|manager)|software engineer|assistant professor|lecturer)\b',title)
     if employment:return saved if saved not in ('Scholarship','Fellowship','Other') else 'Job'
     if re.search(r'(?i)\bscholarships?\b',title):return 'Scholarship'
+    if re.search(r'(?i)\b(?:traineeships?|internships?)\b',title):return 'Internship'
     if re.search(r'(?i)\b(?:fellowships?|postdoctoral|research fellow)\b',title):return 'Fellowship'
     # Admissions/degree study belongs to education even without a scholarship label.
     if re.search(r'(?i)\b(?:admissions?|tuition fees?|study (?:in|at)|universities|bachelor|master|PhD|doctoral)\b',title):
