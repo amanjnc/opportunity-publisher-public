@@ -87,7 +87,9 @@ class TelegramCursorTests(unittest.IsolatedAsyncioTestCase):
         with patch('collectors.refresh_pending_source_dates'),patch.dict(sys.modules,{'telethon':types.SimpleNamespace(TelegramClient=Client)}),patch('collectors.env',side_effect=lambda k:'1' if k=='TELEGRAM_API_ID' else 'hash'),patch('collectors.get_state',return_value='100'),patch('collectors.set_state') as state,patch('collectors.source_exists',return_value=True),patch('collectors.store',return_value=False):
             result=await collectors.fetch_telegram_async({'telegram_channels':['source'],'max_items_per_source':2})
         self.assertTrue(calls['reverse']);self.assertEqual(calls['min_id'],100)
-        state.assert_called_once_with('telegram:last_id:7','102')
+        state.assert_any_call('telegram:last_id:7','102')
+        state.assert_any_call('telegram:source_initialized:source','1')
+        self.assertNotIn('offset_date',calls)
 
 class PublicStateTests(unittest.TestCase):
     def test_requires_explicit_state_repository(self):
