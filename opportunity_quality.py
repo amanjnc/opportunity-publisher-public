@@ -6,16 +6,10 @@ from urllib.parse import urlsplit
 
 
 def publication_block_reason(opp):
-    from opportunity_dates import deadline_problem, source_is_recent
+    from opportunity_dates import deadline_problem
     problem=deadline_problem(opp)
     if problem:return problem
-    if str(opp.get('source_key') or '').startswith('telegram:') and not opp.get('source_posted_at'):
-        return 'Source date must be verified against the five-day collection window.'
-    if opp.get('source_posted_at'):
-        from datetime import datetime
-        try:posted=datetime.fromisoformat(opp['source_posted_at'].replace('Z','+00:00'))
-        except ValueError:return 'Source publication time is invalid.'
-        if not source_is_recent(posted):return 'Source post is older than five days.'
+    # Source recency is enforced on collection, not while saved items wait.
     raw='\n'.join(str(opp.get(k) or '') for k in
                   ('title','description','raw_text','eligibility','location'))
     host=(urlsplit(str(opp.get('apply_url') or '')).hostname or '').lower()
