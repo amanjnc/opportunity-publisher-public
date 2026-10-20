@@ -131,6 +131,27 @@ def restore_requested_aixbio():
     print('Requested AIxBio record restored to approved fellowship queue; normal expiry and duplicate checks still apply.', flush=True)
 
 
+def recover_missing_application_links():
+    """Re-extract links lost by old cleanup; never reset publication attempts."""
+    from source_cleanup import clean_source
+    from transform import preferred_url
+    recovered = 0
+    with db() as c:
+        rows = c.execute(
+            "SELECT * FROM opportunities o WHERE status IN ('review','approved') "
+            "AND apply_url='' AND NOT EXISTS "
+            "(SELECT 1 FROM publications p WHERE p.opportunity_id=o.id)"
+        ).fetchall()
+        for row in rows:
+            item = dict(row)
+            candidate = preferred_url(clean_source(item.get('raw_text', ''), item.get('source_name', '')))
+            if candidate and application_url({'apply_url': candidate, 'source_url': item.get('source_url', '')}):
+                c.execute("UPDATE opportunities SET apply_url=? WHERE id=? AND apply_url=''",
+                          (candidate, item['id']))
+                recovered += 1
+    print('Recovered missing application links:', recovered, flush=True)
+
+
 def run(checkpoint=None):
     init_db()
     sync_roundup_destination()
@@ -180,6 +201,7 @@ def run(checkpoint=None):
             print('Collection not due; using the saved queue.', flush=True)
         signal.alarm(max(1, int(budget - (time.monotonic() - started))))
         restore_requested_aixbio()
+        recover_missing_application_links()
         print('Automatically approved:', auto_approve(), flush=True)
         report_queues()
         if not enabled('AUTO_PUBLISH'):
