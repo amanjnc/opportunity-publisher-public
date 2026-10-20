@@ -34,14 +34,14 @@ def social_url(url):
 # These identify the publisher's marketing, not the opportunity provider.
 SOURCE_BRAND = re.compile(r'(?i)\b(?:OHUB(?:4AllET)?|OHUBET|OHUB Educational Consultancy|Rez[_ ]On[_ ]Bridge)\b')
 MARKETING = re.compile(r"(?i)\b(?:connect with us|for (?:more |daily )?updates|our (?:social media|telegram|channel|page)|advertise with us|paid promotion|educational consultancy|exam booking|IELTS preparation class|book (?:your|an?) (?:IELTS|exam)|contact us for (?:admission|visa|consultancy)|study abroad consultancy)\b")
-FACT = re.compile(r'(?i)^(?:[^\w]*)(?:deadline|apply|application(?:s| process| link)?|eligibility|requirements|benefits|responsibilities|qualifications|salary|stipend|duration|location|host|organis[ae]r|how to apply|documents required)\b')
+FACT = re.compile(r'(?i)^(?:[^\w]*)(?:more info(?:rmation)?|details|deadline|apply|application(?:s| process| link)?|eligibility|requirements|benefits|responsibilities|qualifications|salary|stipend|duration|location|host|organis[ae]r|how to apply|documents required)\b')
 
 
 def promotional(line):
     plain=unicodedata.normalize('NFKC', visible_text(line)).strip().strip('*_')
     return bool(SOCIAL_LABEL.search(plain) or FOLLOW.search(plain) or
                 MENTION_LINE.fullmatch(plain) or MARKETING.search(plain) or
-                (SOURCE_BRAND.search(plain) and not FACT.search(plain)))
+                (SOURCE_BRAND.search(URL.sub('', plain)) and not FACT.search(plain)))
 
 
 def clean_source(text, source_name=""):
