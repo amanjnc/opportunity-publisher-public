@@ -173,4 +173,40 @@ class CollectionRecoveryTests(unittest.TestCase):
             self.assertEqual(collect.call_count,2)
             self.assertEqual(float(storage.get_state('cloud:last_collection_success')),last)
 
+
+class MessageIsolationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_bad_message_is_deferred_other_messages_continue_and_retry(self):
+        import sys,types
+        from datetime import datetime,timezone
+        from unittest.mock import AsyncMock
+        import collectors,storage
+        first=True
+        msg=lambda id:types.SimpleNamespace(id=id,date=datetime.now(timezone.utc),raw_text='Valid opportunity',entities=[],text_html='')
+        class Client:
+            def __init__(self,*a,**kw):pass
+            async def connect(self):pass
+            async def disconnect(self):pass
+            async def is_user_authorized(self):return True
+            async def get_entity(self,ch):return types.SimpleNamespace(id=7,username='source')
+            async def get_messages(self,entity,ids):return [msg(id) for id in ids]
+            async def iter_messages(self,entity,**kw):
+                if kw.get('min_id',0)<102:
+                    for id in (101,102):yield msg(id)
+        def store(raw,key,*args,**kwargs):
+            nonlocal first
+            if key.endswith(':101') and first:
+                first=False
+                raise ValueError('bad content')
+            return True
+        with tempfile.TemporaryDirectory() as tmp,patch.object(storage,'DATA_DIR',Path(tmp)),patch.object(storage,'DB_PATH',Path(tmp)/'test.db'):
+            storage.init_db()
+            cfg={'telegram_channels':['source'],'max_items_per_source':30}
+            with patch.dict(sys.modules,{'telethon':types.SimpleNamespace(TelegramClient=Client)}),patch.object(collectors,'refresh_pending_source_dates',new_callable=AsyncMock),patch.object(collectors,'env',side_effect=lambda key:'1' if key=='TELEGRAM_API_ID' else 'hash'),patch.object(collectors,'store',side_effect=store),patch.object(collectors,'source_exists',return_value=False),patch.object(collectors,'source_image',new_callable=AsyncMock,return_value=''):
+                self.assertEqual(await collectors.fetch_telegram_async(cfg),1)
+                self.assertEqual(storage.get_state('telegram:retry_ids:7'),'[101]')
+                self.assertEqual(storage.get_state('telegram:last_id:7'),'102')
+                self.assertEqual(await collectors.fetch_telegram_async(cfg),1)
+                self.assertEqual(storage.get_state('telegram:retry_ids:7'),'[]')
+                self.assertEqual(storage.get_state('telegram:last_id:7'),'102')
+
 if __name__=='__main__':unittest.main()

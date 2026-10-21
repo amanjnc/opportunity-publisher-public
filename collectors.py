@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import re
@@ -194,38 +195,63 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                 return await asyncio.wait_for(collect_channel_inner(channel), timeout=int(cfg.get("source_timeout_seconds", 50)))
         async def collect_channel_inner(channel):
             channel_total = 0
+            phase = 'resolve source'
             try:
                 entity = await client.get_entity(channel)
-                await refresh_pending_source_dates(client, entity)
+                phase = 'backfill source dates'
+                try:
+                    await refresh_pending_source_dates(client, entity)
+                except Exception as exc:
+                    LOG.warning('Source date backfill deferred for %s (%s); continuing new messages', channel, type(exc).__name__)
                 cursor_key = f'telegram:last_id:{entity.id}'
                 old_id = int(get_state(cursor_key, '0'))
+                retry_key = 'telegram:retry_ids:' + str(entity.id)
+                try:
+                    retry_ids = json.loads(get_state(retry_key, '[]'))
+                    if not isinstance(retry_ids, list):retry_ids = []
+                    retry_ids = [int(value) for value in retry_ids if str(value).isdigit()][:30]
+                except (ValueError, TypeError):
+                    retry_ids = []
+                failed_ids = set(retry_ids)
+                phase = 'fetch new messages'
                 # Bootstrap from the age cutoff; subsequent pages use only the
                 # saved message ID. Do not combine independent date and ID offsets.
                 offsets = {'min_id': old_id} if old_id else {'offset_date': collection_now - timedelta(hours=48)}
                 messages = [m async for m in client.iter_messages(entity, limit=max_items, reverse=True, **offsets)]
+                if retry_ids:
+                    phase = 'fetch deferred messages'
+                    deferred = await client.get_messages(entity, ids=retry_ids)
+                    messages = list({m.id: m for m in [*messages, *deferred] if m}.values())
                 scanned_recent = 0
                 skipped_old = 0
                 highest = old_id
                 for msg in sorted(messages, key=lambda m: m.id):
-                    highest = max(highest, msg.id)
-                    if not source_is_recent(getattr(msg, 'date', None), collection_now):
-                        skipped_old += 1
-                        continue
-                    scanned_recent += 1
-                    raw = (msg.raw_text or '')[:13000]
-                    if not raw:
-                        continue
-                    extra_urls = [e.url for e in (msg.entities or []) if getattr(e, 'url', None)]
-                    raw += '\n' + '\n'.join(extra_urls)
-                    username = getattr(entity, 'username', '') or ''
-                    url = f'https://t.me/{username}/{msg.id}' if username else ''
-                    source_key = f'telegram:{entity.id}:{msg.id}'
-                    media_name = ''
-                    if not source_exists(source_key) and keyword_match(raw, cfg):
-                        media_name = await source_image(client, entity, msg, messages)
-                    channel_total += int(store(raw, source_key, channel, url, cfg,
-                                       fields={'image_path': media_name, 'source_posted_at': msg.date.isoformat()},
-                                       source_html=getattr(msg, 'text_html', '') or ''))
+                    phase = 'process message'
+                    failed_ids.discard(msg.id)
+                    try:
+                        highest = max(highest, msg.id)
+                        if not source_is_recent(getattr(msg, 'date', None), collection_now):
+                            skipped_old += 1
+                            continue
+                        scanned_recent += 1
+                        raw = (msg.raw_text or '')[:13000]
+                        if not raw:
+                            continue
+                        extra_urls = [e.url for e in (msg.entities or []) if getattr(e, 'url', None)]
+                        raw += '\n' + '\n'.join(extra_urls)
+                        username = getattr(entity, 'username', '') or ''
+                        url = f'https://t.me/{username}/{msg.id}' if username else ''
+                        source_key = f'telegram:{entity.id}:{msg.id}'
+                        media_name = ''
+                        if not source_exists(source_key) and keyword_match(raw, cfg):
+                            media_name = await source_image(client, entity, msg, messages)
+                        channel_total += int(store(raw, source_key, channel, url, cfg,
+                                           fields={'image_path': media_name, 'source_posted_at': msg.date.isoformat()},
+                                           source_html=getattr(msg, 'text_html', '') or ''))
+                    except Exception as exc:
+                        failed_ids.add(msg.id)
+                        LOG.warning('Deferred one message from %s id=%s (%s); other messages continue', channel, msg.id, type(exc).__name__)
+                set_state(retry_key, json.dumps(sorted(failed_ids)))
                 if highest > old_id:
                     set_state(cursor_key, str(highest))
                 set_state('telegram:source_initialized:' + str(channel).strip().casefold(), '1')
@@ -234,7 +260,7 @@ async def fetch_telegram_async(cfg: dict | None = None) -> int:
                          getattr(messages[0], 'date', '') if messages else '',
                          getattr(messages[-1], 'date', '') if messages else '')
             except Exception as exc:
-                LOG.error('Could not collect Telegram channel %s (%s)', channel, type(exc).__name__)
+                LOG.error('Could not collect Telegram channel %s during %s (%s); other sources continue', channel, phase, type(exc).__name__)
             return channel_total
         results = await asyncio.gather(*(collect_channel(channel) for channel in channels), return_exceptions=True)
         for result in results:
