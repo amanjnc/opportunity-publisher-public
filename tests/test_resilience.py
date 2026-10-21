@@ -84,12 +84,12 @@ class StateTests(unittest.TestCase):
         writes=self.store.writes
         with patch.object(state,'api',side_effect=self.store.api),patch.object(state,'pack',return_value=second):
             state.save()
-            self.assertEqual(self.store.writes,writes+1)
+            self.assertEqual(self.store.writes,writes+2)
             state.restore()
             state.save()
         self.assertEqual((self.root/'data/media/photo.jpg').read_bytes(),photo)
         self.assertEqual((self.root/'data/opportunities.db').read_bytes(),b'second database')
-        self.assertEqual(self.store.writes,writes+1)
+        self.assertEqual(self.store.writes,writes+2)
 
     def test_archive_above_old_25mb_limit_is_durable(self):
         self.seed_existing(self.archive())

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from functools import lru_cache
+from datetime import datetime, timezone, timedelta
 import zipfile
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -159,7 +160,15 @@ def pack():
         snapshot = sqlite3.connect(':memory:')
         with sqlite3.connect(DB_PATH) as source:
             source.backup(snapshot)
+        # Retain identity facts and the text used by duplicate matching. Only
+        # rejected records older than seven days lose redundant saved captions.
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        snapshot.execute("UPDATE opportunities SET telegram_text='',linkedin_text='',"
+                         "raw_text=substr(raw_text,1,6000),description=substr(description,1,6000),image_path='' "
+                         "WHERE status='rejected' AND updated_at<?", (cutoff,))
+        snapshot.commit()
         media = archived_images(snapshot, data)
+        snapshot.execute('VACUUM')
         # serialize avoids copying live WAL files. All records/history remain.
         write_archive(archive, 'opportunities.db', snapshot.serialize())
         snapshot.close()
@@ -321,9 +330,95 @@ def save(seed=False):
     current = get_entry(name, 'state.enc', missing_ok=seed)
     if (current or {}).get('sha') != (entry or {}).get('sha'):
         raise RuntimeError('Concurrent checkpoint detected; refusing to replace newer state.')
+    # Keep the immediately previous complete checkpoint for recovery.
+    if entry:
+        previous_root = read_blob(name, entry)
+        backup = get_entry(name, 'state.previous.enc', missing_ok=True)
+        if (backup or {}).get('sha') != entry['sha']:
+            put_entry(name, 'state.previous.enc', previous_root, backup)
     sha = put_entry(name, 'state.enc', root, entry)
     write_meta(sha, digest, media_paths)
     print(f'Encrypted state checkpoint saved ({len(encrypted):,} bytes).', flush=True)
+    # Verify persisted root before removing any local or remote media.
+    if read_blob(name, get_entry(name, 'state.enc')) != root:
+        raise RuntimeError('Checkpoint read-back failed; cleanup was not attempted.')
+    try:
+        cleanup_local_media(plain)
+        cleanup_remote_media(name)
+    except Exception as exc:
+        # Maintenance is optional; a durable checkpoint must not become a
+        # failed publishing run because housekeeping was unavailable.
+        print(f'Storage cleanup deferred ({type(exc).__name__}); saved state retained.', flush=True)
+
+
+def cleanup_local_media(plain):
+    """Only delete files omitted from an already saved and verified archive."""
+    with zipfile.ZipFile(io.BytesIO(plain)) as archive:
+        keep = {Path(n).name for n in archive.namelist() if n.startswith('media/')}
+    folder = ROOT / 'data' / 'media'
+    count = 0
+    if folder.exists():
+        for path in folder.iterdir():
+            if path.is_file() and not path.is_symlink() and path.name not in keep:
+                path.unlink()
+                count += 1
+    if count:
+        print(f'Storage cleanup: removed {count} unused local images.', flush=True)
+
+
+def checkpoint_parts(name, entry):
+    """Validate a checkpoint before using its references for garbage collection."""
+    cipher = Fernet(os.environ['STATE_ENCRYPTION_KEY'].encode())
+    plain = cipher.decrypt(read_blob(name, entry))
+    if not plain.startswith(b'{'):
+        with zipfile.ZipFile(io.BytesIO(plain)) as archive:
+            if archive.testzip() is not None:
+                raise RuntimeError('Recovery archive integrity failed.')
+        return set()
+    manifest = json.loads(plain)
+    if manifest.get('format') == 'publisher-media-v2':
+        decode_media_checkpoint(name, manifest, cipher)
+    else:
+        decode_sharded_checkpoint(name, manifest, cipher)
+    return {part['path'] for part in manifest['parts']}
+
+
+def cleanup_remote_media(name):
+    """Daily atomic pruning; retain current AND previous complete checkpoints.
+
+    Uses a fast-forward Git update: a competing writer makes the update fail,
+    never deleting assets referenced by a newer state. Git history is retained.
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    marker = get_entry(name, 'state-maintenance.json', missing_ok=True)
+    if marker and json.loads(read_blob(name, marker)).get('date') == today:
+        return
+    head = api(f'repos/{name}/git/ref/heads/{BRANCH}')['object']['sha']
+    commit = api(f'repos/{name}/git/commits/{head}')
+    tree = api(f'repos/{name}/git/trees/{commit["tree"]["sha"]}?recursive=1')
+    if tree.get('truncated'):
+        raise RuntimeError('Incomplete tree; refusing cleanup.')
+    entries = {item['path']: item for item in tree['tree'] if item['type'] == 'blob'}
+    # Read by the pinned tree blob SHA, never by a moving branch reference.
+    current = entries.get('state.enc')
+    previous = entries.get('state.previous.enc')
+    if not current or not previous:
+        return
+    keep = checkpoint_parts(name, current) | checkpoint_parts(name, previous)
+    candidates = [path for path in entries if
+                  re.fullmatch(r'state-(?:media|parts)/[a-f0-9]{64}\.enc', path)
+                  and path not in keep]
+    changes = [{'path': path, 'mode': '100644', 'type': 'blob', 'sha': None}
+               for path in candidates]
+    changes.append({'path': 'state-maintenance.json', 'mode': '100644', 'type': 'blob',
+                    'content': json.dumps({'date': today, 'removed_groups': len(candidates)})})
+    new_tree = api(f'repos/{name}/git/trees', 'POST',
+                   {'base_tree': commit['tree']['sha'], 'tree': changes})['sha']
+    new_commit = api(f'repos/{name}/git/commits', 'POST',
+                     {'message': 'Prune unused encrypted media; retain recovery checkpoint',
+                      'tree': new_tree, 'parents': [head]})['sha']
+    api(f'repos/{name}/git/refs/heads/{BRANCH}', 'PATCH', {'sha': new_commit, 'force': False})
+    print(f'Storage cleanup: removed {len(candidates)} unused encrypted groups; recovery checkpoint retained.', flush=True)
 
 
 def read_blob(name, entry):
