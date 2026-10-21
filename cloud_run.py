@@ -186,15 +186,23 @@ def run(checkpoint=None):
     try:
         # Reserve up to 120 seconds for publishing and state saves.
         signal.alarm(budget)
-        last_collection = float(get_state('cloud:last_collection_attempt', '0'))
+        last_collection = float(get_state('cloud:last_collection_success',
+                                          get_state('cloud:last_collection_attempt', '0')))
+        # Preserve the legacy successful baseline before recording a new attempt.
+        if not get_state('cloud:last_collection_success'):
+            set_state('cloud:last_collection_success', str(last_collection))
         collection_interval = max(5, int(cfg.get('collect_every_minutes', 120))) * 60
         if time.time() - last_collection >= collection_interval:
             # Persist attempt time before collecting, even if a source times out.
-            set_state('cloud:last_collection_attempt', str(time.time()))
+            collection_started = time.time()
+            set_state('cloud:last_collection_attempt', str(collection_started))
+            print('Collection started:', datetime.now(publish.TZ).isoformat(), flush=True)
             if checkpoint:
                 checkpoint()
             try:
                 print('Collection:', collect_all(), flush=True)
+                set_state('cloud:last_collection_success', str(collection_started))
+                print('Collection completed:', datetime.now(publish.TZ).isoformat(), flush=True)
             except (TimeoutError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
                 print('Collection stopped; collected records retained:', type(exc).__name__, flush=True)
         else:
@@ -250,3 +258,5 @@ if __name__ == '__main__':
         run(checkpoint=save)
     finally:
         save()
+    from pathlib import Path
+    Path('.cloud-cycle-complete').write_text('ok')

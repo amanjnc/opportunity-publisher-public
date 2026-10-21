@@ -63,4 +63,4 @@ jobs:
       - name: Save progress even after a failed live cycle
         if: ${{ always() && env.AUTO_PUBLISH == 'true' }}
         run: |
-          if [ -f .cloud-restored ]; then python cloud_state.py save; fi
+          if [ -f .cloud-restored ] && [ ! -f .cloud-cycle-complete ]; then python cloud_state.py save; fi
