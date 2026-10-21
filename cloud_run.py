@@ -192,7 +192,10 @@ def run(checkpoint=None):
         if not get_state('cloud:last_collection_success'):
             set_state('cloud:last_collection_success', str(last_collection))
         collection_interval = max(5, int(cfg.get('collect_every_minutes', 120))) * 60
-        if time.time() - last_collection >= collection_interval:
+        # Reconcile once after the checkpoint-format upgrade: prior collections
+        # may have completed locally but never reached durable state.
+        recovering_checkpoint = not get_state('cloud:checkpoint_format:v2')
+        if recovering_checkpoint or time.time() - last_collection >= collection_interval:
             # Persist attempt time before collecting, even if a source times out.
             collection_started = time.time()
             set_state('cloud:last_collection_attempt', str(collection_started))
@@ -202,6 +205,7 @@ def run(checkpoint=None):
             try:
                 print('Collection:', collect_all(), flush=True)
                 set_state('cloud:last_collection_success', str(collection_started))
+                set_state('cloud:checkpoint_format:v2', '1')
                 print('Collection completed:', datetime.now(publish.TZ).isoformat(), flush=True)
             except (TimeoutError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
                 print('Collection stopped; collected records retained:', type(exc).__name__, flush=True)
