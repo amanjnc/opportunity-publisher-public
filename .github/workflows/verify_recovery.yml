@@ -21,7 +21,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_TARGET_CHANNEL: ${{ secrets.TELEGRAM_TARGET_CHANNEL }}
       TELEGRAM_EDUCATION_CHANNEL: ${{ secrets.TELEGRAM_EDUCATION_CHANNEL }}
-      AUTO_PUBLISH: ${{ vars.PUBLISHER_ENABLED == 'true' }}
+      AUTO_PUBLISH: 'false'
       AUTO_LINKEDIN: 'false'
       PYTHONUNBUFFERED: '1'
     steps:
